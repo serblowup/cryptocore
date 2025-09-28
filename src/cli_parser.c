@@ -10,17 +10,19 @@
 #include <ctype.h>
 
 void print_usage(const char *program_name) {
-    fprintf(stderr, "Usage: %s --algorithm aes --mode ecb --encrypt|--decrypt --key KEY --input INPUT_FILE [--output OUTPUT_FILE]\n", program_name);
+    fprintf(stderr, "Usage: %s --algorithm aes --mode MODE --encrypt|--decrypt --key KEY --input INPUT_FILE [--output OUTPUT_FILE] [--iv IV]\n", program_name);
     fprintf(stderr, "\nArguments:\n");
     fprintf(stderr, "  --algorithm ALGORITHM    Cipher algorithm (only 'aes' supported)\n");
-    fprintf(stderr, "  --mode MODE              Mode of operation (only 'ecb' supported)\n");
+    fprintf(stderr, "  --mode MODE              Mode of operation (ecb, cbc, cfb, ofb, ctr)\n");
     fprintf(stderr, "  --encrypt                Encrypt the input file\n");
     fprintf(stderr, "  --decrypt                Decrypt the input file\n");
     fprintf(stderr, "  --key KEY                128-bit key as hexadecimal string (32 characters)\n");
     fprintf(stderr, "  --input INPUT_FILE       Input file path\n");
     fprintf(stderr, "  --output OUTPUT_FILE     Output file path (optional)\n");
-    fprintf(stderr, "\nExample:\n");
-    fprintf(stderr, "  %s --algorithm aes --mode ecb --encrypt --key 000102030405060708090a0b0c0d0e0f --input plain.txt --output cipher.bin\n", program_name);
+    fprintf(stderr, "  --iv IV                  Initialization vector as hexadecimal string (32 characters, for decryption only)\n");
+    fprintf(stderr, "\nExamples:\n");
+    fprintf(stderr, "  Encryption: %s --algorithm aes --mode cbc --encrypt --key 000102...0f --input plain.txt --output cipher.bin\n", program_name);
+    fprintf(stderr, "  Decryption: %s --algorithm aes --mode cbc --decrypt --key 000102...0f --iv AABBCC...8899 --input cipher.bin --output decrypted.txt\n", program_name);
 }
 
 int hex_string_to_bytes(const char *hex_string, BYTE *bytes, size_t bytes_len) {
@@ -64,6 +66,7 @@ int parse_arguments(int argc, char *argv[], config_t *config) {
     int decrypt_flag = 0;
 
     memset(config, 0, sizeof(config_t));
+    config->iv_provided = 0;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--algorithm") == 0) {
@@ -79,8 +82,21 @@ int parse_arguments(int argc, char *argv[], config_t *config) {
                 fprintf(stderr, "Error: --mode requires an argument\n");
                 return 0;
             }
-            strncpy(config->mode, argv[++i], sizeof(config->mode) - 1);
-            config->mode[sizeof(config->mode) - 1] = '\0';
+            char *mode_str = argv[++i];
+            if (strcmp(mode_str, "ecb") == 0) {
+                config->mode = MODE_ECB;
+            } else if (strcmp(mode_str, "cbc") == 0) {
+                config->mode = MODE_CBC;
+            } else if (strcmp(mode_str, "cfb") == 0) {
+                config->mode = MODE_CFB;
+            } else if (strcmp(mode_str, "ofb") == 0) {
+                config->mode = MODE_OFB;
+            } else if (strcmp(mode_str, "ctr") == 0) {
+                config->mode = MODE_CTR;
+            } else {
+                fprintf(stderr, "Error: Unsupported mode '%s'. Supported modes: ecb, cbc, cfb, ofb, ctr\n", mode_str);
+                return 0;
+            }
         }
         else if (strcmp(argv[i], "--encrypt") == 0) {
             encrypt_flag = 1;
@@ -99,6 +115,17 @@ int parse_arguments(int argc, char *argv[], config_t *config) {
                 fprintf(stderr, "Error: Invalid key format. Must be 32-character hexadecimal string\n");
                 return 0;
             }
+        }
+        else if (strcmp(argv[i], "--iv") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: --iv requires an argument\n");
+                return 0;
+            }
+            if (!hex_string_to_bytes(argv[++i], config->iv, IV_SIZE)) {
+                fprintf(stderr, "Error: Invalid IV format. Must be 32-character hexadecimal string\n");
+                return 0;
+            }
+            config->iv_provided = 1;
         }
         else if (strcmp(argv[i], "--input") == 0) {
             if (i + 1 >= argc) {
@@ -131,15 +158,6 @@ int parse_arguments(int argc, char *argv[], config_t *config) {
         return 0;
     }
 
-    if (strlen(config->mode) == 0) {
-        fprintf(stderr, "Error: --mode is required\n");
-        return 0;
-    }
-    if (strcmp(config->mode, "ecb") != 0) {
-        fprintf(stderr, "Error: Only 'ecb' mode is supported\n");
-        return 0;
-    }
-
     if (!encrypt_flag && !decrypt_flag) {
         fprintf(stderr, "Error: Either --encrypt or --decrypt must be specified\n");
         return 0;
@@ -147,6 +165,15 @@ int parse_arguments(int argc, char *argv[], config_t *config) {
     if (encrypt_flag && decrypt_flag) {
         fprintf(stderr, "Error: Cannot specify both --encrypt and --decrypt\n");
         return 0;
+    }
+
+    if (config->operation == MODE_ENCRYPT && config->iv_provided) {
+        fprintf(stderr, "Warning: --iv is ignored during encryption (IV is generated automatically)\n");
+        config->iv_provided = 0;
+    }
+
+    if (config->operation == MODE_DECRYPT && config->mode != MODE_ECB && !config->iv_provided) {
+        fprintf(stderr, "Warning: --iv not provided for decryption in mode %d. Will try to read from file.\n", config->mode);
     }
 
     if (strlen(config->input_file) == 0) {
@@ -158,7 +185,6 @@ int parse_arguments(int argc, char *argv[], config_t *config) {
         char base_name[MAX_PATH_LEN];
         get_base_name(config->input_file, base_name, sizeof(base_name));
 
-        // Безопасное формирование имени файла
         if (config->operation == MODE_ENCRYPT) {
             snprintf(config->output_file, sizeof(config->output_file), "%.*s.enc",
                     (int)(sizeof(config->output_file) - 5), base_name);

@@ -4,7 +4,12 @@ LDFLAGS = -lssl -lcrypto
 
 SRC_DIR = src
 BUILD_DIR = build
-SRCS = $(SRC_DIR)/main.c $(SRC_DIR)/modes/ecb.c $(SRC_DIR)/cli_parser.c $(SRC_DIR)/file_io.c
+MODES_DIR = $(SRC_DIR)/modes
+
+SRCS = $(SRC_DIR)/main.c $(SRC_DIR)/cli_parser.c $(SRC_DIR)/file_io.c \
+       $(MODES_DIR)/ecb.c $(MODES_DIR)/cbc.c $(MODES_DIR)/cfb.c \
+       $(MODES_DIR)/ofb.c $(MODES_DIR)/ctr.c
+
 OBJS = $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
 TARGET = cryptocore
 
@@ -20,8 +25,8 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 directories:
-	@mkdir -p $(BUILD_DIR)
+	@mkdir -p $(BUILD_DIR)/modes
 
 clean:
 	rm -rf $(BUILD_DIR) $(TARGET)
-
+	

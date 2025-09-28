@@ -33,6 +33,7 @@ int read_file(const char *filename, BYTE **data, size_t *data_len) {
         return 0;
     }
 
+    // Читаем данные из файла
     size_t bytes_read = fread(*data, 1, *data_len, file);
     fclose(file);
 
