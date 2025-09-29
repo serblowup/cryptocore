@@ -92,9 +92,9 @@ int main(int argc, char *argv[]) {
             if (is_our_format) {
                 memmove(input_data, input_data + IV_SIZE, input_len - IV_SIZE);
                 input_len -= IV_SIZE;
-                printf("DEBUG: Removed IV from file. New input_len=%zu\n", input_len);
+                printf("Removed IV from file\n");
             } else {
-                printf("DEBUG: Using full file as ciphertext (OpenSSL format)\n");
+                printf("Using full file as ciphertext (OpenSSL format)\n");
             }
         } else {
             if (input_len < IV_SIZE) {
@@ -104,7 +104,7 @@ int main(int argc, char *argv[]) {
             memcpy(actual_iv, input_data, IV_SIZE);
             memmove(input_data, input_data + IV_SIZE, input_len - IV_SIZE);
             input_len -= IV_SIZE;
-            printf("DEBUG: Read IV from file, new input_len=%zu\n", input_len);
+            printf("Read IV from file\n");
         }
     }
 

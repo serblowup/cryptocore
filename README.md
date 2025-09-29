@@ -5,9 +5,18 @@
 ## Требования
 
 - **Linux**
+- **GCC**
 - **OpenSSL библиотеки**
+- **Утилита XXD ( пакет vim )**
 
-### Режимы работы и синтаксис:
+### Сборка проекта
+
+- **git clone https://github.com/serblowup/cryptocore.git**
+- **cd cryptocore**
+- **make clean**
+- **make**
+
+#### Режимы работы и синтаксис:
 
 1)**ECB**
 - Шифруем
@@ -43,15 +52,15 @@ xxd -l 16 cbc_cipher.bin
 - Дешифруем
 ./cryptocore --algorithm aes --mode ctr --decrypt --key 000102030405060708090a0b0c0d0e0f --input ctr_cipher.bin --output ctr_decrypted.txt
 
-#### Совместимость с OpenSSL:
+##### Совместимость с OpenSSL:
 
 1)**Шифруем консольной утилитой, дешифруем с помощью OpenSSL**
 - Шифруем
 ./cryptocore --algorithm aes --mode cbc --encrypt --key 000102030405060708090a0b0c0d0e0f --input "/home/sergey/cryptocore/cryptocore/tests/Primer.txt" --output cipher.bin
 
-dd if=cipher.bin of=iv.bin bs=16 count=1
+  dd if=cipher.bin of=iv.bin bs=16 count=1
 
-dd if=cipher.bin of=ciphertext_only.bin bs=16 skip=1
+  dd if=cipher.bin of=ciphertext_only.bin bs=16 skip=1
 
 - Дешифруем
 openssl enc -aes-128-cbc -d -K 000102030405060708090A0B0C0D0E0F -iv $(xxd -p iv.bin | tr -d '\n') -in ciphertext_only.bin -out decrypted.txt
