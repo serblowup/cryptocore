@@ -10,11 +10,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+int run_all_key_tests(void);
+int generate_nist_test_file(const char* filename, size_t size_bytes);
+void print_nist_instructions(void);
+
 void generate_random_iv(BYTE *iv) {
-    if (RAND_bytes(iv, IV_SIZE) != 1) {
-        for (int i = 0; i < IV_SIZE; i++) {
-            iv[i] = rand() % 256;
-        }
+    if (generate_random_bytes(iv, IV_SIZE) != 1) {
+        fprintf(stderr, "Fatal error: Failed to generate IV\n");
+        exit(EXIT_FAILURE);
     }
 }
 
@@ -68,14 +71,33 @@ int main(int argc, char *argv[]) {
     size_t input_len, output_len;
     int success = 0;
 
+    OPENSSL_init_ssl(0, NULL);
+
     if (!parse_arguments(argc, argv, &config)) {
         print_usage(argv[0]);
         return 1;
     }
 
+    if (strcmp(config.input_file, "--test-keys") == 0) {
+        return run_all_key_tests() ? 0 : 1;
+    }
+
+    if (strcmp(config.input_file, "--test-nist") == 0) {
+        if (generate_nist_test_file("nist_test_data.bin", 10000000)) {
+            print_nist_instructions();
+            return 0;
+        } else {
+            return 1;
+        }
+    }
+
     if (!read_file(config.input_file, &input_data, &input_len)) {
         fprintf(stderr, "Error: Cannot read input file '%s'\n", config.input_file);
         return 1;
+    }
+
+    if (config.key_provided && is_weak_key(config.key, AES_128_KEY_SIZE)) {
+        fprintf(stderr, "Warning: The provided key appears to be weak. Consider using a stronger key.\n");
     }
 
     if (config.operation == MODE_ENCRYPT) {
@@ -189,3 +211,4 @@ cleanup:
 
     return success ? 0 : 1;
 }
+

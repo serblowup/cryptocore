@@ -15,6 +15,7 @@
 #include <openssl/evp.h>
 #include <openssl/aes.h>
 #include <openssl/rand.h>
+#include <openssl/ssl.h>
 
 #define BLOCK_SIZE 16
 #define AES_128_KEY_SIZE 16
@@ -46,7 +47,14 @@ typedef struct {
     char output_file[MAX_PATH_LEN];
     int iv_provided;
     int force_format;
+    int key_provided;
 } config_t;
+
+int generate_random_bytes(uint8_t* buffer, size_t num_bytes);
+int generate_random_key(BYTE* key);
+int is_weak_key(const BYTE* key, size_t key_len);
+int test_key_uniqueness(void);
+int generate_nist_test_file(const char* filename, size_t size_bytes);
 
 int parse_arguments(int argc, char *argv[], config_t *config);
 void print_usage(const char *program_name);
@@ -76,6 +84,4 @@ int requires_padding(cipher_mode_t mode);
 void xor_blocks(const BYTE *a, const BYTE *b, BYTE *result, size_t len);
 
 #endif
-
-
 

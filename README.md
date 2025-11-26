@@ -72,3 +72,16 @@ openssl enc -aes-128-cbc -K 000102030405060708090A0B0C0D0E0F -iv AABBCCDDEEFF001
 - Дешифруем
 ./cryptocore --algorithm aes --mode cbc --decrypt --key 000102030405060708090A0B0C0D0E0F --iv AABBCCDDEEFF00112233445566778899 --input openssl_cipher.bin --output decrypted.txt
 
+###### Шифрование без ключа:
+- Шифруем
+./cryptocore --algorithm aes --mode cbc --encrypt --input "/home/sergey/cryptocore/cryptocore/tests/Primer.txt" --output no_key.bin
+- Шифрование успешно, сгенерированный ключ выводится для пользователя.
+- Дешифруем ( только с введённым ключом )
+./cryptocore --algorithm aes --mode cbc --decrypt --key ad1b0c789c7e7878d797d0985c73cd68 --input no_key.bin --output no_key.txt
+
+###### Запуск тестов:
+- Тесты генератора ключей
+./cryptocore --input --test-keys
+- NIST тесты
+./cryptocore --input --test-nist
+Результат NIST тестов представлен в NIST_results.txt
