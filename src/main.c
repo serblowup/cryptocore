@@ -6,6 +6,8 @@
  */
 
 #include "../include/main.h"
+#include "../include/sha256.h"
+#include "../include/sha3_256.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -63,6 +65,66 @@ int detect_file_format(const BYTE *data, size_t data_len, cipher_mode_t mode, co
     }
 }
 
+static int compute_hash(algorithm_t algorithm, const char *input_file, const char *output_file) {
+    BYTE *input_data = NULL;
+    size_t input_len;
+    BYTE digest[32];
+    char hash_hex[65];
+    int success = 0;
+
+    if (!read_file(input_file, &input_data, &input_len)) {
+        fprintf(stderr, "Error: Cannot read input file '%s'\n", input_file);
+        return 0;
+    }
+
+    switch (algorithm) {
+        case ALG_SHA256:
+            if (input_len > 10 * 1024 * 1024) { // Use chunk processing for files > 10MB
+                printf("Large file detected, using chunk processing...\n");
+                if (!sha256_file_hash(input_file, digest, 8192)) {
+                    fprintf(stderr, "Error: SHA-256 computation failed\n");
+                    goto cleanup;
+                }
+            } else {
+                sha256_hash(input_data, input_len, digest);
+            }
+            break;
+        case ALG_SHA3_256:
+            if (!sha3_256_hash(input_data, input_len, digest)) {
+                fprintf(stderr, "Error: SHA3-256 computation failed\n");
+                goto cleanup;
+            }
+            break;
+        default:
+            fprintf(stderr, "Error: Unsupported hash algorithm\n");
+            goto cleanup;
+    }
+
+    for (int i = 0; i < 32; i++) {
+        sprintf(hash_hex + (i * 2), "%02x", digest[i]);
+    }
+    hash_hex[64] = '\0';
+
+    if (output_file) {
+        FILE *file = fopen(output_file, "w");
+        if (!file) {
+            fprintf(stderr, "Error: Cannot open output file '%s'\n", output_file);
+            goto cleanup;
+        }
+        fprintf(file, "%s %s\n", hash_hex, input_file);
+        fclose(file);
+        printf("Hash written to: %s\n", output_file);
+    } else {
+        printf("%s %s\n", hash_hex, input_file);
+    }
+
+    success = 1;
+
+cleanup:
+    if (input_data) free(input_data);
+    return success;
+}
+
 int main(int argc, char *argv[]) {
     config_t config;
     BYTE *input_data = NULL;
@@ -70,8 +132,16 @@ int main(int argc, char *argv[]) {
     BYTE actual_iv[IV_SIZE];
     size_t input_len, output_len;
     int success = 0;
+    int dgst_mode = 0;
 
     OPENSSL_init_ssl(0, NULL);
+
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "dgst") == 0) {
+            dgst_mode = 1;
+            break;
+        }
+    }
 
     if (!parse_arguments(argc, argv, &config)) {
         print_usage(argv[0]);
@@ -89,6 +159,20 @@ int main(int argc, char *argv[]) {
         } else {
             return 1;
         }
+    }
+
+    if (strcmp(config.input_file, "--test-hash") == 0) {
+        return run_hash_tests() ? 0 : 1;
+    }
+
+    if (dgst_mode) {
+        if (config.algorithm == ALG_SHA256 || config.algorithm == ALG_SHA3_256) {
+            success = compute_hash(config.algorithm, config.input_file,
+                                 strlen(config.output_file) > 0 ? config.output_file : NULL);
+        } else {
+            fprintf(stderr, "Error: Unsupported hash algorithm\n");
+        }
+        goto cleanup;
     }
 
     if (!read_file(config.input_file, &input_data, &input_len)) {
@@ -211,4 +295,3 @@ cleanup:
 
     return success ? 0 : 1;
 }
-

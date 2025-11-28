@@ -52,7 +52,21 @@ xxd -l 16 cbc_cipher.bin
 - Дешифруем
 ./cryptocore --algorithm aes --mode ctr --decrypt --key 000102030405060708090a0b0c0d0e0f --input ctr_cipher.bin --output ctr_decrypted.txt
 
-##### Совместимость с OpenSSL:
+##### Команда dgst для вычисления хеша:
+
+1)**Вывод хеша в командной строке**
+./cryptocore dgst --algorithm sha256 --input "/home/sergey/Рабочий стол/Primer2.txt" **- SHA-256**
+./cryptocore dgst --algorithm sha3-256 --input "/home/sergey/Рабочий стол/Primer2.txt" **- SHA3-256**
+
+2)**Сохранение хеша в файл**
+./cryptocore dgst --algorithm sha256 --input "/home/sergey/Рабочий стол/Primer2.txt" --output Primer2.sha256 **- SHA-256**
+./cryptocore dgst --algorithm sha3-256 --input "/home/sergey/Рабочий стол/Primer2.txt" --output Primer2.sha3 **- SHA3-256**
+
+3)**Результат идентичен системным командам**
+sha256sum "/home/sergey/Рабочий стол/Primer2.txt" **- SHA-256**
+sha3sum -a 256 "/home/sergey/Рабочий стол/Primer2.txt" **- SHA3-256**
+
+###### Совместимость с OpenSSL:
 
 1)**Шифруем консольной утилитой, дешифруем с помощью OpenSSL**
 - Шифруем
@@ -85,3 +99,5 @@ openssl enc -aes-128-cbc -K 000102030405060708090A0B0C0D0E0F -iv AABBCCDDEEFF001
 - NIST тесты
 ./cryptocore --input --test-nist
 Результат NIST тестов представлен в NIST_results.txt
+- Тесты хеш-функций
+./cryptocore --input --test-hash
