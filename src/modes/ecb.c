@@ -132,3 +132,48 @@ int ecb_decrypt(const BYTE *key, const BYTE *input, size_t input_len, BYTE **out
     return 1;
 }
 
+int ecb_encrypt_no_padding(const BYTE *key, const BYTE *input, size_t input_len, BYTE **output, size_t *output_len) {
+    EVP_CIPHER_CTX *ctx;
+    int len;
+    int ciphertext_len;
+
+    if (input_len % BLOCK_SIZE != 0) {
+        return 0;
+    }
+
+    *output = malloc(input_len);
+    if (!*output) {
+        return 0;
+    }
+
+    if (!(ctx = EVP_CIPHER_CTX_new())) {
+        free(*output);
+        return 0;
+    }
+
+    if (1 != EVP_EncryptInit_ex(ctx, EVP_aes_128_ecb(), NULL, key, NULL)) {
+        EVP_CIPHER_CTX_free(ctx);
+        free(*output);
+        return 0;
+    }
+
+    EVP_CIPHER_CTX_set_padding(ctx, 0);
+
+    if (1 != EVP_EncryptUpdate(ctx, *output, &len, input, input_len)) {
+        EVP_CIPHER_CTX_free(ctx);
+        free(*output);
+        return 0;
+    }
+    ciphertext_len = len;
+
+    if (1 != EVP_EncryptFinal_ex(ctx, *output + len, &len)) {
+        EVP_CIPHER_CTX_free(ctx);
+        free(*output);
+        return 0;
+    }
+    ciphertext_len += len;
+
+    EVP_CIPHER_CTX_free(ctx);
+    *output_len = ciphertext_len;
+    return 1;
+}

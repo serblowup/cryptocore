@@ -40,7 +40,9 @@ typedef enum {
 typedef enum {
     ALG_AES,
     ALG_SHA256,
-    ALG_SHA3_256
+    ALG_SHA3_256,
+    ALG_HMAC,
+    ALG_CMAC
 } algorithm_t;
 
 typedef struct {
@@ -51,9 +53,13 @@ typedef struct {
     BYTE iv[IV_SIZE];
     char input_file[MAX_PATH_LEN];
     char output_file[MAX_PATH_LEN];
+    char verify_file[MAX_PATH_LEN];
     int iv_provided;
     int force_format;
     int key_provided;
+    int hmac_mode;
+    int cmac_mode;
+    int verify_mode;
 } config_t;
 
 int generate_random_bytes(uint8_t* buffer, size_t num_bytes);
@@ -69,13 +75,11 @@ void print_hex(const BYTE *data, size_t len);
 int read_file(const char *filename, BYTE **data, size_t *data_len);
 int write_file(const char *filename, const BYTE *data, size_t data_len);
 
-int process_file_in_chunks(const char *filename,
-                          void (*process_chunk)(const BYTE *chunk, size_t chunk_len, void *context),
-                          void *context,
-                          size_t chunk_size);
+int process_file_in_chunks(const char *filename, void (*process_chunk)(const BYTE *chunk, size_t chunk_len, void *context), void *context, size_t chunk_size);
 int get_file_size(const char *filename, size_t *file_size);
 
 int ecb_encrypt(const BYTE *key, const BYTE *input, size_t input_len, BYTE **output, size_t *output_len);
+int ecb_encrypt_no_padding(const BYTE *key, const BYTE *input, size_t input_len, BYTE **output, size_t *output_len);
 int ecb_decrypt(const BYTE *key, const BYTE *input, size_t input_len, BYTE **output, size_t *output_len);
 int cbc_encrypt(const BYTE *key, const BYTE *iv, const BYTE *input, size_t input_len, BYTE **output, size_t *output_len);
 int cbc_decrypt(const BYTE *key, const BYTE *iv, const BYTE *input, size_t input_len, BYTE **output, size_t *output_len);
@@ -91,5 +95,6 @@ int requires_padding(cipher_mode_t mode);
 void xor_blocks(const BYTE *a, const BYTE *b, BYTE *result, size_t len);
 
 int run_hash_tests(void);
+int run_all_mac_tests(void);
 
 #endif

@@ -8,6 +8,8 @@
 #include "../include/main.h"
 #include "../include/sha256.h"
 #include "../include/sha3_256.h"
+#include "../include/hmac.h"
+#include "../include/cmac.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -65,6 +67,171 @@ int detect_file_format(const BYTE *data, size_t data_len, cipher_mode_t mode, co
     }
 }
 
+static int compute_hmac(config_t *config, const char *input_file, const char *output_file, const char *verify_file) {
+    BYTE *input_data = NULL;
+    size_t input_len;
+    BYTE digest[32];
+    char mac_hex[65];
+    int success = 0;
+
+    if (!read_file(input_file, &input_data, &input_len)) {
+        fprintf(stderr, "Error: Cannot read input file '%s'\n", input_file);
+        return 0;
+    }
+
+    if (!hmac_file_compute(config->key, 16, input_file, digest, 8192)) {
+        fprintf(stderr, "Error: HMAC-SHA256 computation failed\n");
+        goto cleanup;
+    }
+
+    if (config->verify_mode) {
+        BYTE *verify_data = NULL;
+        size_t verify_len;
+
+        if (!read_file(verify_file, &verify_data, &verify_len)) {
+            fprintf(stderr, "Error: Cannot read verify file '%s'\n", verify_file);
+            goto cleanup;
+        }
+
+        char *expected_hex = strtok((char*)verify_data, " \t\n");
+        if (!expected_hex) {
+            fprintf(stderr, "Error: Invalid verify file format\n");
+            free(verify_data);
+            goto cleanup;
+        }
+
+        BYTE expected_digest[32];
+        size_t expected_len = strlen(expected_hex);
+        if (expected_len != 64) { // 32 bytes * 2
+            fprintf(stderr, "Error: Expected HMAC length mismatch\n");
+            free(verify_data);
+            goto cleanup;
+        }
+
+        if (!hex_string_to_bytes(expected_hex, expected_digest, 32)) {
+            fprintf(stderr, "Error: Invalid HMAC format in verify file\n");
+            free(verify_data);
+            goto cleanup;
+        }
+
+        free(verify_data);
+
+        if (memcmp(digest, expected_digest, 32) == 0) {
+            printf("[OK] HMAC verification successful\n");
+            success = 1;
+        } else {
+            printf("[ERROR] HMAC verification failed\n");
+            success = 0;
+        }
+    } else {
+        // Convert digest to hex string
+        for (size_t i = 0; i < 32; i++) {
+            sprintf(mac_hex + (i * 2), "%02x", digest[i]);
+        }
+        mac_hex[64] = '\0';
+
+        if (output_file && strlen(output_file) > 0) {
+            FILE *file = fopen(output_file, "w");
+            if (!file) {
+                fprintf(stderr, "Error: Cannot open output file '%s'\n", output_file);
+                goto cleanup;
+            }
+            fprintf(file, "%s %s\n", mac_hex, input_file);
+            fclose(file);
+            printf("HMAC written to: %s\n", output_file);
+        } else {
+            printf("%s %s\n", mac_hex, input_file);
+        }
+        success = 1;
+    }
+
+cleanup:
+    if (input_data) free(input_data);
+    return success;
+}
+
+static int compute_cmac(config_t *config, const char *input_file, const char *output_file, const char *verify_file) {
+    BYTE *input_data = NULL;
+    size_t input_len;
+    BYTE digest[16];
+    char mac_hex[33];
+    int success = 0;
+
+    if (!read_file(input_file, &input_data, &input_len)) {
+        fprintf(stderr, "Error: Cannot read input file '%s'\n", input_file);
+        return 0;
+    }
+
+    if (!cmac_file_compute(config->key, input_file, digest)) {
+        fprintf(stderr, "Error: CMAC computation failed\n");
+        goto cleanup;
+    }
+
+    if (config->verify_mode) {
+        BYTE *verify_data = NULL;
+        size_t verify_len;
+
+        if (!read_file(verify_file, &verify_data, &verify_len)) {
+            fprintf(stderr, "Error: Cannot read verify file '%s'\n", verify_file);
+            goto cleanup;
+        }
+
+        char *expected_hex = strtok((char*)verify_data, " \t\n");
+        if (!expected_hex) {
+            fprintf(stderr, "Error: Invalid verify file format\n");
+            free(verify_data);
+            goto cleanup;
+        }
+
+        BYTE expected_digest[16];
+        size_t expected_len = strlen(expected_hex);
+        if (expected_len != 32) { // 16 bytes * 2
+            fprintf(stderr, "Error: Expected CMAC length mismatch\n");
+            free(verify_data);
+            goto cleanup;
+        }
+
+        if (!hex_string_to_bytes(expected_hex, expected_digest, 16)) {
+            fprintf(stderr, "Error: Invalid CMAC format in verify file\n");
+            free(verify_data);
+            goto cleanup;
+        }
+
+        free(verify_data);
+
+        if (memcmp(digest, expected_digest, 16) == 0) {
+            printf("[OK] CMAC verification successful\n");
+            success = 1;
+        } else {
+            printf("[ERROR] CMAC verification failed\n");
+            success = 0;
+        }
+    } else {
+        for (size_t i = 0; i < 16; i++) {
+            sprintf(mac_hex + (i * 2), "%02x", digest[i]);
+        }
+        mac_hex[32] = '\0';
+
+        if (output_file && strlen(output_file) > 0) {
+            FILE *file = fopen(output_file, "w");
+            if (!file) {
+                fprintf(stderr, "Error: Cannot open output file '%s'\n", output_file);
+                goto cleanup;
+            }
+            fprintf(file, "%s %s\n", mac_hex, input_file);
+            fclose(file);
+            printf("CMAC written to: %s\n", output_file);
+        } else {
+            printf("%s %s\n", mac_hex, input_file);
+        }
+        success = 1;
+    }
+
+cleanup:
+    if (input_data) free(input_data);
+    return success;
+}
+
 static int compute_hash(algorithm_t algorithm, const char *input_file, const char *output_file) {
     BYTE *input_data = NULL;
     size_t input_len;
@@ -79,7 +246,7 @@ static int compute_hash(algorithm_t algorithm, const char *input_file, const cha
 
     switch (algorithm) {
         case ALG_SHA256:
-            if (input_len > 10 * 1024 * 1024) { // Use chunk processing for files > 10MB
+            if (input_len > 10 * 1024 * 1024) {
                 printf("Large file detected, using chunk processing...\n");
                 if (!sha256_file_hash(input_file, digest, 8192)) {
                     fprintf(stderr, "Error: SHA-256 computation failed\n");
@@ -105,7 +272,7 @@ static int compute_hash(algorithm_t algorithm, const char *input_file, const cha
     }
     hash_hex[64] = '\0';
 
-    if (output_file) {
+    if (output_file && strlen(output_file) > 0) {
         FILE *file = fopen(output_file, "w");
         if (!file) {
             fprintf(stderr, "Error: Cannot open output file '%s'\n", output_file);
@@ -165,12 +332,24 @@ int main(int argc, char *argv[]) {
         return run_hash_tests() ? 0 : 1;
     }
 
+    if (strcmp(config.input_file, "--test-mac") == 0) {
+        return run_all_mac_tests() ? 0 : 1;
+    }
+
     if (dgst_mode) {
-        if (config.algorithm == ALG_SHA256 || config.algorithm == ALG_SHA3_256) {
+        if (config.hmac_mode) {
+            success = compute_hmac(&config, config.input_file,
+                                strlen(config.output_file) > 0 ? config.output_file : NULL,
+                                strlen(config.verify_file) > 0 ? config.verify_file : NULL);
+        } else if (config.cmac_mode) {
+            success = compute_cmac(&config, config.input_file,
+                                 strlen(config.output_file) > 0 ? config.output_file : NULL,
+                                 strlen(config.verify_file) > 0 ? config.verify_file : NULL);
+        } else if (config.algorithm == ALG_SHA256 || config.algorithm == ALG_SHA3_256) {
             success = compute_hash(config.algorithm, config.input_file,
                                  strlen(config.output_file) > 0 ? config.output_file : NULL);
         } else {
-            fprintf(stderr, "Error: Unsupported hash algorithm\n");
+            fprintf(stderr, "Error: Unsupported algorithm for dgst command\n");
         }
         goto cleanup;
     }
@@ -295,3 +474,4 @@ cleanup:
 
     return success ? 0 : 1;
 }
+
