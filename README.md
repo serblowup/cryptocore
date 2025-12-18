@@ -89,7 +89,7 @@
     
 7. **GCM**
 
-    - *Шифруем без ключа и без дополнительных аутентифицируемых данных (AAD)*__
+    - *Шифруем без ключа и без дополнительных аутентифицируемых данных (AAD)*
     ```bash
     ./cryptocore --algorithm aes --mode gcm --encrypt --input "/home/sergey/Рабочий стол/Primer3.txt" --output ciphertext.bin
     Generated random key: 8a44dedfc9d263010e2987bc7e2c530b
@@ -97,7 +97,7 @@
     GCM encryption completed successfully
     Output written to: ciphertext.bin
     ```
-    - *Дешифруем с сгенерированым ключом*__
+    - *Дешифруем с сгенерированым ключом*
     ```bash
     ./cryptocore --algorithm aes --mode gcm --decrypt --key 8a44dedfc9d263010e2987bc7e2c530b --input ciphertext.bin --output decrypted.txt
     Info: Nonce will be read from file (first 12 bytes) for GCM decryption
@@ -107,14 +107,14 @@
     Output written to: decrypted.txt
     ```
     
-    - *Шифруем с ключом и без дополнительных аутентифицируемых данных (AAD)*__
+    - *Шифруем с ключом и без дополнительных аутентифицируемых данных (AAD)*
     ```bash
     ./cryptocore --algorithm aes --mode gcm --encrypt --key 00112233445566778899aabbccddeeff --input "/home/sergey/Рабочий стол/Primer3.txt" --output ciphertext.bin
     Info: No AAD provided, using empty AAD
     GCM encryption completed successfully
     Output written to: ciphertext.bin
     ```
-    - *Дешифруем*__
+    - *Дешифруем*
     ```bash
     ./cryptocore --algorithm aes --mode gcm --decrypt --key 00112233445566778899aabbccddeeff --input ciphertext.bin --output decrypted.txt
     Info: Nonce will be read from file (first 12 bytes) for GCM decryption
@@ -124,14 +124,14 @@
     Output written to: decrypted.txt
     ```
     
-    - *Шифруем с ключом и с дополнительными аутентифицируемыми данными (AAD)*__
+    - *Шифруем с ключом и с дополнительными аутентифицируемыми данными (AAD)*
     ```bash
     ./cryptocore --algorithm aes --mode gcm --encrypt --key 00112233445566778899aabbccddeeff --input "/home/sergey/Рабочий стол/Primer3.txt" --output ciphertext.bin --aad aabbccddeeff0011223344556677
     Info: Using AAD: aabbccddeeff0011223344556677
     GCM encryption completed successfully
     Output written to: ciphertext.bin
     ```
-    - *Дешифруем с ключом и с дополнительными аутентифицируемыми данными (AAD)*__
+    - *Дешифруем с ключом и с дополнительными аутентифицируемыми данными (AAD)*
     ```bash
     ./cryptocore --algorithm aes --mode gcm --decrypt --key 00112233445566778899aabbccddeeff --input ciphertext.bin --output decrypted.txt --aad aabbccddeeff0011223344556677
     Info: Nonce will be read from file (first 12 bytes) for GCM decryption
@@ -141,7 +141,7 @@
     Output written to: decrypted.txt
     ```
     
-    - *Шифрование с указанием iv (nonce)*__
+    - *Шифрование с указанием iv (nonce)*
     ```bash
     ./cryptocore --algorithm aes --mode gcm --encrypt --key 00112233445566778899aabbccddeeff --iv 000000000000000000000000 --input "/home/sergey/Рабочий стол/Primer3.txt" 
     --output ciphertext_with_iv.bin --aad aabbccddeeff0011223344556677
@@ -150,7 +150,7 @@
     GCM encryption completed successfully
     Output written to: ciphertext_with_iv.bin
     ```
-    - *Дешифрование с указанием iv (nonce)*__
+    - *Дешифрование с указанием iv (nonce)*
     ```bash
     ./cryptocore --algorithm aes --mode gcm --decrypt --key 00112233445566778899aabbccddeeff --iv 000000000000000000000000 --input ciphertext_with_iv.bin 
     --output decrypted_with_iv.txt --aad aabbccddeeff0011223344556677eff0011223344556677
@@ -163,7 +163,7 @@
 8. **Шифрование/дешифрование с дополнительными аутентифицируемыми данными (AAD) для режимов CBC, CFB, OFB, CTR**
     
     1. **CBC**
-        - *Шифрование в режиме CBC c дополнительными аутентифицируемыми данными (AAD)*__
+        - *Шифрование в режиме CBC c дополнительными аутентифицируемыми данными (AAD)*
         ```bash
         ./cryptocore --algorithm aes --mode cbc --encrypt --key 00112233445566778899aabbccddeeff --input "/home/sergey/Рабочий стол/Primer4.pdf" 
         --output encrypted_cbc.bin --aad aabbccddeeff0011223344556677
@@ -172,7 +172,7 @@
         ETM (CBC) encryption completed successfully
         Output written to: encrypted_cbc.bin
         ```
-        - *Дешифрование в режиме CBC c дополнительными аутентифицируемыми данными (AAD)*__
+        - *Дешифрование в режиме CBC c дополнительными аутентифицируемыми данными (AAD)*
         ```bash
         ./cryptocore --algorithm aes --mode cbc --decrypt --key 00112233445566778899aabbccddeeff --input encrypted_cbc.bin 
         --output decrypted_cbc.pdf --aad aabbccddeeff0011223344556677
@@ -184,7 +184,7 @@
         ```
         
     2. **CFB**
-        - *Шифрование в режиме CFB c дополнительными аутентифицируемыми данными (AAD)*__
+        - *Шифрование в режиме CFB c дополнительными аутентифицируемыми данными (AAD)*
         ```bash
         ./cryptocore --algorithm aes --mode cfb --encrypt --key 00112233445566778899aabbccddeeff --input "/home/sergey/Рабочий стол/Primer4.pdf" 
         --output encrypted_cfb.bin --aad aabbccddeeff0011223344556677
@@ -193,7 +193,7 @@
         ETM (CFB) encryption completed successfully
         Output written to: encrypted_cfb.bin
         ```
-        - *Дешифрование в режиме CFB c дополнительными аутентифицируемыми данными (AAD)*__
+        - *Дешифрование в режиме CFB c дополнительными аутентифицируемыми данными (AAD)*
         ```bash
         ./cryptocore --algorithm aes --mode cfb --decrypt --key 00112233445566778899aabbccddeeff --input encrypted_cfb.bin 
         --output decrypted_cfb.pdf --aad aabbccddeeff0011223344556677
@@ -205,7 +205,7 @@
         ```
         
     3. **OFB**
-        - *Шифрование в режиме OFB c дополнительными аутентифицируемыми данными (AAD)*__
+        - *Шифрование в режиме OFB c дополнительными аутентифицируемыми данными (AAD)*
         ```bash
         ./cryptocore --algorithm aes --mode ofb --encrypt --key 00112233445566778899aabbccddeeff --input "/home/sergey/Рабочий стол/Primer4.pdf" 
         --output encrypted_ofb.bin --aad aabbccddeeff0011223344556677
@@ -214,7 +214,7 @@
         ETM (OFB) encryption completed successfully
         Output written to: encrypted_ofb.bin
         ```
-        - *Дешифрование в режиме OFB c дополнительными аутентифицируемыми данными (AAD)*__
+        - *Дешифрование в режиме OFB c дополнительными аутентифицируемыми данными (AAD)*
         ```bash
         ./cryptocore --algorithm aes --mode ofb --decrypt --key 00112233445566778899aabbccddeeff --input encrypted_ofb.bin 
         --output decrypted_ofb.pdf --aad aabbccddeeff0011223344556677
@@ -226,7 +226,7 @@
         ```
         
     4. **CTR**
-        - *Шифрование в режиме CTR c дополнительными аутентифицируемыми данными (AAD)*__
+        - *Шифрование в режиме CTR c дополнительными аутентифицируемыми данными (AAD)*
         ```bash
         ./cryptocore --algorithm aes --mode ctr --encrypt --key 00112233445566778899aabbccddeeff --iv 00000000000000000000000000000000 --input "/home/sergey/Рабочий стол/Primer4.pdf"
         --output encrypted_ctr.bin --aad aabbccddeeff0011223344556677
@@ -236,7 +236,7 @@
         ETM (CTR) encryption completed successfully
         Output written to: encrypted_ctr.bin
         ```
-        - *Дешифрование в режиме CTR c дополнительными аутентифицируемыми данными (AAD)*__
+        - *Дешифрование в режиме CTR c дополнительными аутентифицируемыми данными (AAD)*
         ```bash
         ./cryptocore --algorithm aes --mode ctr --decrypt --key 00112233445566778899aabbccddeeff --iv 00000000000000000000000000000000 --input encrypted_ctr.bin 
         --output decrypted_ctr.pdf \--aad aabbccddeeff0011223344556677
@@ -343,7 +343,7 @@
     ```bash
     ./cryptocore --input --test-mac
     ```
-    - *Тесты режима GCM и режимов шифрования с аутентификацией и присоединенными данными*__
+    - *Тесты режима GCM и режимов шифрования с аутентификацией и присоединенными данными*
     ```bash
     ./cryptocore --input --test-aead
     ```
