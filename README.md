@@ -1,6 +1,8 @@
 # cryptocore
 
-*Консольная утилита для шифрования и дешифрования файлов с использованием AES-128 в режимах ECB, CBC, CFB, OFB, CTR. Собственная реализация хеш-функций SHA-256 и SHA3-256, имитовставок HMAC и AES-CMAC.*
+*Консольная утилита для шифрования и дешифрования файлов с использованием AES-128 в режимах ECB, CBC, CFB, OFB, CTR, GCM.*__
+*Собственная реализация хеш-функций SHA-256 и SHA3-256, имитовставок HMAC и AES-CMAC.*__
+*Шифрование/дешифрование с дополнительными аутентифицируемыми данными (AAD) для режимов CBC, CFB, OFB, CTR.*
 
 ## Требования
 
@@ -61,7 +63,134 @@
     - *Дешифруем (только с введённым ключом)*  
     ./cryptocore --algorithm aes --mode cbc --decrypt --key 03ced7bc015ab154663dac4fa5e13246 --input no_key.bin --output no_key.txt
     
-7. **Подкоманда dgst**
+7. **GCM**
+
+    - *Шифруем без ключа и без дополнительных аутентифицируемых данных (AAD)*__
+    ./cryptocore --algorithm aes --mode gcm --encrypt --input "/home/sergey/Рабочий стол/Primer3.txt" --output ciphertext.bin__
+    Generated random key: 8a44dedfc9d263010e2987bc7e2c530b__
+    Info: No AAD provided, using empty AAD__
+    GCM encryption completed successfully__
+    Output written to: ciphertext.bin__
+    - *Дешифруем с сгенерированым ключом*__
+    ./cryptocore --algorithm aes --mode gcm --decrypt --key 8a44dedfc9d263010e2987bc7e2c530b --input ciphertext.bin --output decrypted.txt__
+    Info: Nonce will be read from file (first 12 bytes) for GCM decryption__
+    Info: No AAD provided, using empty AAD__
+    Reading nonce from file (first 12 bytes)__
+    GCM decryption completed successfully__
+    Output written to: decrypted.txt
+    
+    - *Шифруем с ключом и без дополнительных аутентифицируемых данных (AAD)*__
+    ./cryptocore --algorithm aes --mode gcm --encrypt --key 00112233445566778899aabbccddeeff --input "/home/sergey/Рабочий стол/Primer3.txt" --output ciphertext.bin__
+    Info: No AAD provided, using empty AAD__
+    GCM encryption completed successfully__
+    Output written to: ciphertext.bin__
+    - *Дешифруем*__
+    ./cryptocore --algorithm aes --mode gcm --decrypt --key 00112233445566778899aabbccddeeff --input ciphertext.bin --output decrypted.txt__
+    Info: Nonce will be read from file (first 12 bytes) for GCM decryption__
+    Info: No AAD provided, using empty AAD__
+    Reading nonce from file (first 12 bytes)__
+    GCM decryption completed successfully__
+    Output written to: decrypted.txt
+    
+    - *Шифруем с ключом и с дополнительными аутентифицируемыми данными (AAD)*__
+    ./cryptocore --algorithm aes --mode gcm --encrypt --key 00112233445566778899aabbccddeeff --input "/home/sergey/Рабочий стол/Primer3.txt" --output ciphertext.bin --aad aabbccddeeff0011223344556677__
+    Info: Using AAD: aabbccddeeff0011223344556677__
+    GCM encryption completed successfully__
+    Output written to: ciphertext.bin__
+    - *Дешифруем с ключом и с дополнительными аутентифицируемыми данными (AAD)*__
+    ./cryptocore --algorithm aes --mode gcm --decrypt --key 00112233445566778899aabbccddeeff --input ciphertext.bin --output decrypted.txt --aad aabbccddeeff0011223344556677__
+    Info: Nonce will be read from file (first 12 bytes) for GCM decryption__
+    Info: Using AAD: aabbccddeeff0011223344556677__
+    Reading nonce from file (first 12 bytes)__
+    GCM decryption completed successfully__
+    Output written to: decrypted.txt
+    
+    - *Шифрование с указанием iv (nonce)*__
+    ./cryptocore --algorithm aes --mode gcm --encrypt --key 00112233445566778899aabbccddeeff --iv 000000000000000000000000 --input "/home/sergey/Рабочий стол/Primer3.txt"__ 
+    --output ciphertext_with_iv.bin --aad aabbccddeeff0011223344556677__
+    Warning: User-provided nonce will be used for GCM encryption__
+    Info: Using AAD: aabbccddeeff0011223344556677__
+    GCM encryption completed successfully__
+    Output written to: ciphertext_with_iv.bin__
+    - *Дешифрование с указанием iv (nonce)*__
+    ./cryptocore --algorithm aes --mode gcm --decrypt --key 00112233445566778899aabbccddeeff --iv 000000000000000000000000 --input ciphertext_with_iv.bin__ 
+    --output decrypted_with_iv.txt --aad aabbccddeeff0011223344556677eff0011223344556677__
+    Info: Using AAD: aabbccddeeff0011223344556677__
+    Using user-provided nonce via --iv__
+    GCM decryption completed successfully__
+    Output written to: decrypted_with_iv.txt
+
+8. **Шифрование/дешифрование с дополнительными аутентифицируемыми данными (AAD) для режимов CBC, CFB, OFB, CTR**
+    
+    1. **CBC**
+        - *Шифрование в режиме CBC c дополнительными аутентифицируемыми данными (AAD)*__
+        ./cryptocore --algorithm aes --mode cbc --encrypt --key 00112233445566778899aabbccddeeff --input "/home/sergey/Рабочий стол/Primer4.pdf"__ 
+        --output encrypted_cbc.bin --aad aabbccddeeff0011223344556677__
+        Info: Using AAD: aabbccddeeff0011223344556677__
+        Info: Encrypt-then-MAC (ETM) mode activated for mode 1__
+        ETM (CBC) encryption completed successfully__
+        Output written to: encrypted_cbc.bin__
+        - *Дешифрование в режиме CBC c дополнительными аутентифицируемыми данными (AAD)*__
+        ./cryptocore --algorithm aes --mode cbc --decrypt --key 00112233445566778899aabbccddeeff --input encrypted_cbc.bin__ 
+        --output decrypted_cbc.pdf --aad aabbccddeeff0011223344556677__
+        Warning: --iv not provided for decryption in mode 1. Will try to read from file.__
+        Info: Using AAD: aabbccddeeff0011223344556677__
+        Info: Encrypt-then-MAC (ETM) mode activated for mode 1__
+        ETM (CBC) decryption completed successfully__
+        Output written to: decrypted_cbc.pdf
+        
+    2. **CFB**
+        - *Шифрование в режиме CFB c дополнительными аутентифицируемыми данными (AAD)*__
+        ./cryptocore --algorithm aes --mode cfb --encrypt --key 00112233445566778899aabbccddeeff --input "/home/sergey/Рабочий стол/Primer4.pdf"__ 
+        --output encrypted_cfb.bin --aad aabbccddeeff0011223344556677__
+        Info: Using AAD: aabbccddeeff0011223344556677__
+        Info: Encrypt-then-MAC (ETM) mode activated for mode 2__
+        ETM (CFB) encryption completed successfully__
+        Output written to: encrypted_cfb.bin__
+        - *Дешифрование в режиме CFB c дополнительными аутентифицируемыми данными (AAD)*__
+        ./cryptocore --algorithm aes --mode cfb --decrypt --key 00112233445566778899aabbccddeeff --input encrypted_cfb.bin__ 
+        --output decrypted_cfb.pdf --aad aabbccddeeff0011223344556677__
+        Warning: --iv not provided for decryption in mode 2. Will try to read from file.__
+        Info: Using AAD: aabbccddeeff0011223344556677__
+        Info: Encrypt-then-MAC (ETM) mode activated for mode 2__
+        ETM (CFB) decryption completed successfully__
+        Output written to: decrypted_cfb.pdf
+        
+    3. **OFB**
+        - *Шифрование в режиме OFB c дополнительными аутентифицируемыми данными (AAD)*__
+        ./cryptocore --algorithm aes --mode ofb --encrypt --key 00112233445566778899aabbccddeeff --input "/home/sergey/Рабочий стол/Primer4.pdf"__ 
+        --output encrypted_ofb.bin --aad aabbccddeeff0011223344556677__
+        Info: Using AAD: aabbccddeeff0011223344556677__
+        Info: Encrypt-then-MAC (ETM) mode activated for mode 3__
+        ETM (OFB) encryption completed successfully__
+        Output written to: encrypted_ofb.bin__
+        - *Дешифрование в режиме OFB c дополнительными аутентифицируемыми данными (AAD)*__
+        ./cryptocore --algorithm aes --mode ofb --decrypt --key 00112233445566778899aabbccddeeff --input encrypted_ofb.bin__ 
+        --output decrypted_ofb.pdf --aad aabbccddeeff0011223344556677__
+        Warning: --iv not provided for decryption in mode 3. Will try to read from file.__
+        Info: Using AAD: aabbccddeeff0011223344556677__
+        Info: Encrypt-then-MAC (ETM) mode activated for mode 3__
+        ETM (OFB) decryption completed successfully__
+        Output written to: decrypted_ofb.pdf
+        
+    4. **CTR**
+        - *Шифрование в режиме CTR c дополнительными аутентифицируемыми данными (AAD)*__
+        ./cryptocore --algorithm aes --mode ctr --encrypt --key 00112233445566778899aabbccddeeff --iv 00000000000000000000000000000000 --input "/home/sergey/Рабочий стол/Primer4.pdf"__ 
+        --output encrypted_ctr.bin --aad aabbccddeeff0011223344556677__
+        Warning: --iv is ignored during encryption (IV is generated automatically)__
+        Info: Using AAD: aabbccddeeff0011223344556677__
+        Info: Encrypt-then-MAC (ETM) mode activated for mode 4__
+        ETM (CTR) encryption completed successfully__
+        Output written to: encrypted_ctr.bin__
+        - *Дешифрование в режиме CTR c дополнительными аутентифицируемыми данными (AAD)*__
+        ./cryptocore --algorithm aes --mode ctr --decrypt --key 00112233445566778899aabbccddeeff --iv 00000000000000000000000000000000 --input encrypted_ctr.bin__ 
+        --output decrypted_ctr.pdf \--aad aabbccddeeff0011223344556677__
+        Info: Using AAD: aabbccddeeff0011223344556677__
+        Info: Encrypt-then-MAC (ETM) mode activated for mode 4__
+        ETM (CTR) decryption completed successfully__
+        Output written to: decrypted_ctr.pdf
+        
+9. **Подкоманда dgst**
 
     1. **SHA-256**
         - *Вывод хеша в консоли*  
@@ -115,7 +244,7 @@
         CMAC computed for 103 bytes from '/home/sergey/Рабочий стол/Primer3.txt'  
         |OK| CMAC verification successful
         
-8. **Запуск тестов**
+10. **Запуск тестов**
     - *Тесты генератора ключей*  
     ./cryptocore --input --test-keys  
     - *NIST-тесты*  
@@ -125,6 +254,8 @@
     ./cryptocore --input --test-hash  
     - *Тесты имитовставок*  
     ./cryptocore --input --test-mac
+    - *Тесты режима GCM и режимов шифрования с аутентификацией и присоединенными данными*__
+    ./cryptocore --input --test-aead
     
 ##### Совместимость с OpenSSL:
 

@@ -21,6 +21,9 @@
 #define AES_128_KEY_SIZE 16
 #define MAX_PATH_LEN 1024
 #define IV_SIZE 16
+#define GCM_NONCE_SIZE 12
+#define GCM_TAG_SIZE 16
+#define MAX_AAD_SIZE 1024
 
 typedef unsigned char BYTE;
 
@@ -34,7 +37,8 @@ typedef enum {
     MODE_CBC,
     MODE_CFB,
     MODE_OFB,
-    MODE_CTR
+    MODE_CTR,
+    MODE_GCM
 } cipher_mode_t;
 
 typedef enum {
@@ -51,15 +55,23 @@ typedef struct {
     operation_mode_t operation;
     BYTE key[AES_128_KEY_SIZE];
     BYTE iv[IV_SIZE];
+    BYTE nonce[GCM_NONCE_SIZE];
+    BYTE aad_data[MAX_AAD_SIZE];
+    size_t aad_len;
     char input_file[MAX_PATH_LEN];
     char output_file[MAX_PATH_LEN];
     char verify_file[MAX_PATH_LEN];
+    char aad_hex[MAX_PATH_LEN];
     int iv_provided;
+    int nonce_provided;
+    int aad_provided;
     int force_format;
     int key_provided;
     int hmac_mode;
     int cmac_mode;
     int verify_mode;
+    int gcm_mode;
+    int etm_mode;
 } config_t;
 
 int generate_random_bytes(uint8_t* buffer, size_t num_bytes);
@@ -90,11 +102,35 @@ int ofb_decrypt(const BYTE *key, const BYTE *iv, const BYTE *input, size_t input
 int ctr_encrypt(const BYTE *key, const BYTE *iv, const BYTE *input, size_t input_len, BYTE **output, size_t *output_len);
 int ctr_decrypt(const BYTE *key, const BYTE *iv, const BYTE *input, size_t input_len, BYTE **output, size_t *output_len);
 
+int gcm_encrypt_full(const BYTE *key,
+                     const BYTE *plaintext, size_t plaintext_len,
+                     const BYTE *aad, size_t aad_len,
+                     BYTE **output, size_t *output_len);
+
+int gcm_decrypt_full(const BYTE *key,
+                     const BYTE *input, size_t input_len,
+                     const BYTE *aad, size_t aad_len,
+                     BYTE **output, size_t *output_len);
+
+int encrypt_then_mac(cipher_mode_t enc_mode,
+                     const BYTE *key, size_t key_len,
+                     const BYTE *plaintext, size_t plaintext_len,
+                     const BYTE *aad, size_t aad_len,
+                     BYTE **output, size_t *output_len);
+
+int decrypt_then_verify(cipher_mode_t enc_mode,
+                        const BYTE *key, size_t key_len,
+                        const BYTE *input, size_t input_len,
+                        const BYTE *aad, size_t aad_len,
+                        BYTE **output, size_t *output_len);
+
 void generate_random_iv(BYTE *iv);
+void generate_random_nonce(BYTE *nonce);
 int requires_padding(cipher_mode_t mode);
 void xor_blocks(const BYTE *a, const BYTE *b, BYTE *result, size_t len);
 
 int run_hash_tests(void);
 int run_all_mac_tests(void);
+int run_aead_tests(void);
 
-#endif
+#endif /* MAIN_H */

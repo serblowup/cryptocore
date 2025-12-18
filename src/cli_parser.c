@@ -15,20 +15,22 @@
 
 void print_usage(const char *program_name) {
     fprintf(stderr, "Usage:\n");
-    fprintf(stderr, "  Encryption/Decryption: %s --algorithm aes --mode MODE --encrypt|--decrypt [--key KEY] --input INPUT_FILE [--output OUTPUT_FILE] [--iv IV]\n", program_name);
+    fprintf(stderr, "  Encryption/Decryption: %s --algorithm aes --mode MODE --encrypt|--decrypt [--key KEY] --input INPUT_FILE [--output OUTPUT_FILE] [--iv IV] [--aad AAD]\n", program_name);
     fprintf(stderr, "  Hashing: %s dgst --algorithm ALGORITHM --input INPUT_FILE [--output OUTPUT_FILE]\n", program_name);
     fprintf(stderr, "  HMAC: %s dgst --algorithm sha256 --hmac --key KEY --input INPUT_FILE [--output OUTPUT_FILE] [--verify VERIFY_FILE]\n", program_name);
     fprintf(stderr, "  CMAC: %s dgst --algorithm aes --cmac --key KEY --input INPUT_FILE [--output OUTPUT_FILE] [--verify VERIFY_FILE]\n", program_name);
     fprintf(stderr, "  Testing: %s --input TEST_COMMAND\n", program_name);
     fprintf(stderr, "\nEncryption/Decryption Arguments:\n");
     fprintf(stderr, "  --algorithm ALGORITHM    Cipher algorithm (only 'aes' supported)\n");
-    fprintf(stderr, "  --mode MODE              Mode of operation (ecb, cbc, cfb, ofb, ctr)\n");
+    fprintf(stderr, "  --mode MODE              Mode of operation (ecb, cbc, cfb, ofb, ctr, gcm)\n");
     fprintf(stderr, "  --encrypt                Encrypt the input file\n");
     fprintf(stderr, "  --decrypt                Decrypt the input file\n");
     fprintf(stderr, "  --key KEY                128-bit key as hexadecimal string (32 characters, optional for encryption)\n");
     fprintf(stderr, "  --input INPUT_FILE       Input file path\n");
     fprintf(stderr, "  --output OUTPUT_FILE     Output file path (optional)\n");
     fprintf(stderr, "  --iv IV                  Initialization vector as hexadecimal string (32 characters, for decryption only)\n");
+    fprintf(stderr, "                           For GCM mode: 24-character hex string (12 bytes) for nonce\n");
+    fprintf(stderr, "  --aad AAD                Additional Authenticated Data as hexadecimal string (for GCM and ETM modes)\n");
     fprintf(stderr, "\nHash Arguments:\n");
     fprintf(stderr, "  dgst                     Compute message digest\n");
     fprintf(stderr, "  --algorithm ALGORITHM    Hash algorithm (sha256, sha3-256)\n");
@@ -55,9 +57,13 @@ void print_usage(const char *program_name) {
     fprintf(stderr, "  --input --test-nist      Generate 10MB file for NIST tests\n");
     fprintf(stderr, "  --input --test-hash      Run hash function tests\n");
     fprintf(stderr, "  --input --test-mac       Run MAC function tests\n");
+    fprintf(stderr, "  --input --test-aead      Run AEAD (GCM) function tests\n");
     fprintf(stderr, "\nExamples:\n");
     fprintf(stderr, "  Encryption:              %s --algorithm aes --mode cbc --encrypt --input plain.txt --output cipher.bin\n", program_name);
-    fprintf(stderr, "  Decryption:              %s --algorithm aes --mode cbc --decrypt --key 000102...0f --input cipher.bin --output decrypted.txt\n", program_name);
+    fprintf(stderr, "  GCM Encryption:          %s --algorithm aes --mode gcm --encrypt --key 001122...0f --input plain.txt --output cipher.bin --aad aabbccddeeff\n", program_name);
+    fprintf(stderr, "  GCM Decryption:          %s --algorithm aes --mode gcm --decrypt --key 001122...0f --input cipher.bin --output decrypted.txt --aad aabbccddeeff\n", program_name);
+    fprintf(stderr, "  ETM Encryption (CBC):    %s --algorithm aes --mode cbc --encrypt --key 001122...0f --input plain.txt --output cipher.bin --aad aabbccddeeff\n", program_name);
+    fprintf(stderr, "  ETM Decryption (CTR):    %s --algorithm aes --mode ctr --decrypt --key 001122...0f --input cipher.bin --output decrypted.txt --aad aabbccddeeff\n", program_name);
     fprintf(stderr, "  SHA-256 hash:            %s dgst --algorithm sha256 --input document.pdf\n", program_name);
     fprintf(stderr, "  HMAC-SHA-256:            %s dgst --algorithm sha256 --hmac --key 001122...ff --input message.txt\n", program_name);
     fprintf(stderr, "  AES-CMAC:                %s dgst --algorithm aes --cmac --key 001122...ff --input message.txt --output message.cmac\n", program_name);
@@ -65,6 +71,7 @@ void print_usage(const char *program_name) {
     fprintf(stderr, "  Key tests:               %s --input --test-keys\n", program_name);
     fprintf(stderr, "  Hash tests:              %s --input --test-hash\n", program_name);
     fprintf(stderr, "  MAC tests:               %s --input --test-mac\n", program_name);
+    fprintf(stderr, "  AEAD tests:              %s --input --test-aead\n", program_name);
 }
 
 int hex_string_to_bytes(const char *hex_string, BYTE *bytes, size_t bytes_len) {
@@ -94,8 +101,15 @@ static void get_base_name(const char *path, char *base_name, size_t base_name_si
         filename = path;
     }
 
-    strncpy(base_name, filename, base_name_size - 1);
-    base_name[base_name_size - 1] = '\0';
+    size_t filename_len = strlen(filename);
+    size_t copy_len = filename_len;
+
+    if (copy_len >= base_name_size) {
+        copy_len = base_name_size - 1;
+    }
+
+    memcpy(base_name, filename, copy_len);
+    base_name[copy_len] = '\0';
 
     char *dot = strrchr(base_name, '.');
     if (dot != NULL) {
@@ -110,11 +124,14 @@ int parse_arguments(int argc, char *argv[], config_t *config) {
 
     memset(config, 0, sizeof(config_t));
     config->iv_provided = 0;
+    config->nonce_provided = 0;
+    config->aad_provided = 0;
     config->key_provided = 0;
     config->hmac_mode = 0;
     config->cmac_mode = 0;
     config->verify_mode = 0;
-    config->algorithm = ALG_AES;
+    config->gcm_mode = 0;
+    config->etm_mode = 0;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "dgst") == 0) {
@@ -128,7 +145,8 @@ int parse_arguments(int argc, char *argv[], config_t *config) {
             if (strcmp(argv[i + 1], "--test-keys") == 0 ||
                 strcmp(argv[i + 1], "--test-nist") == 0 ||
                 strcmp(argv[i + 1], "--test-hash") == 0 ||
-                strcmp(argv[i + 1], "--test-mac") == 0) {
+                strcmp(argv[i + 1], "--test-mac") == 0 ||
+                strcmp(argv[i + 1], "--test-aead") == 0) {
                 strncpy(config->input_file, argv[i + 1], sizeof(config->input_file) - 1);
                 config->input_file[sizeof(config->input_file) - 1] = '\0';
                 return 1;
@@ -186,8 +204,11 @@ int parse_arguments(int argc, char *argv[], config_t *config) {
                 config->mode = MODE_OFB;
             } else if (strcmp(mode_str, "ctr") == 0) {
                 config->mode = MODE_CTR;
+            } else if (strcmp(mode_str, "gcm") == 0) {
+                config->mode = MODE_GCM;
+                config->gcm_mode = 1;
             } else {
-                fprintf(stderr, "Error: Unsupported mode '%s'. Supported modes: ecb, cbc, cfb, ofb, ctr\n", mode_str);
+                fprintf(stderr, "Error: Unsupported mode '%s'. Supported modes: ecb, cbc, cfb, ofb, ctr, gcm\n", mode_str);
                 return 0;
             }
         }
@@ -271,11 +292,58 @@ int parse_arguments(int argc, char *argv[], config_t *config) {
                 fprintf(stderr, "Error: --iv not allowed for hash/MAC operations\n");
                 return 0;
             }
-            if (!hex_string_to_bytes(argv[++i], config->iv, IV_SIZE)) {
-                fprintf(stderr, "Error: Invalid IV format. Must be 32-character hexadecimal string\n");
+
+            if (config->mode == MODE_GCM) {
+                if (!hex_string_to_bytes(argv[++i], config->nonce, GCM_NONCE_SIZE)) {
+                    fprintf(stderr, "Error: Invalid nonce format for GCM. Must be 24-character hexadecimal string (12 bytes)\n");
+                    return 0;
+                }
+                config->nonce_provided = 1;
+                config->iv_provided = 1;
+            } else {
+                if (!hex_string_to_bytes(argv[++i], config->iv, IV_SIZE)) {
+                    fprintf(stderr, "Error: Invalid IV format. Must be 32-character hexadecimal string\n");
+                    return 0;
+                }
+                config->iv_provided = 1;
+            }
+        }
+        else if (strcmp(argv[i], "--aad") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: --aad requires an argument\n");
                 return 0;
             }
-            config->iv_provided = 1;
+            if (dgst_flag) {
+                fprintf(stderr, "Error: --aad only allowed for encryption operations\n");
+                return 0;
+            }
+
+            char *aad_hex = argv[++i];
+            size_t aad_hex_len = strlen(aad_hex);
+
+            if (aad_hex_len % 2 != 0) {
+                fprintf(stderr, "Error: AAD must be hexadecimal string with even length\n");
+                return 0;
+            }
+
+            config->aad_len = aad_hex_len / 2;
+            if (config->aad_len > MAX_AAD_SIZE) {
+                fprintf(stderr, "Error: AAD too large. Maximum size is %d bytes\n", MAX_AAD_SIZE);
+                return 0;
+            }
+
+            if (!hex_string_to_bytes(aad_hex, config->aad_data, config->aad_len)) {
+                fprintf(stderr, "Error: Invalid AAD format\n");
+                return 0;
+            }
+
+            strncpy(config->aad_hex, aad_hex, sizeof(config->aad_hex) - 1);
+            config->aad_hex[sizeof(config->aad_hex) - 1] = '\0';
+            config->aad_provided = 1;
+
+            if (config->mode != MODE_GCM && config->mode != MODE_ECB) {
+                config->etm_mode = 1;
+            }
         }
         else if (strcmp(argv[i], "--input") == 0) {
             if (i + 1 >= argc) {
@@ -381,13 +449,38 @@ int parse_arguments(int argc, char *argv[], config_t *config) {
         print_hex(config->key, AES_128_KEY_SIZE);
     }
 
-    if (config->operation == MODE_ENCRYPT && config->iv_provided) {
-        fprintf(stderr, "Warning: --iv is ignored during encryption (IV is generated automatically)\n");
-        config->iv_provided = 0;
+    if (config->operation == MODE_ENCRYPT) {
+        if (config->mode == MODE_GCM && config->iv_provided) {
+            printf("Warning: User-provided nonce will be used for GCM encryption\n");
+        } else if (config->mode != MODE_GCM && config->iv_provided) {
+            fprintf(stderr, "Warning: --iv is ignored during encryption (IV is generated automatically)\n");
+            config->iv_provided = 0;
+        }
+    } else {
+        if (config->mode != MODE_ECB && !config->iv_provided && config->mode != MODE_GCM) {
+            fprintf(stderr, "Warning: --iv not provided for decryption in mode %d. Will try to read from file.\n", config->mode);
+        }
+
+        if (config->mode == MODE_GCM && !config->iv_provided) {
+            printf("Info: Nonce will be read from file (first 12 bytes) for GCM decryption\n");
+        }
     }
 
-    if (config->operation == MODE_DECRYPT && config->mode != MODE_ECB && !config->iv_provided) {
-        fprintf(stderr, "Warning: --iv not provided for decryption in mode %d. Will try to read from file.\n", config->mode);
+    if (config->aad_provided) {
+        printf("Info: Using AAD: %s\n", config->aad_hex);
+        if (config->etm_mode) {
+            printf("Info: Encrypt-then-MAC (ETM) mode activated for mode %d\n", config->mode);
+        }
+    } else {
+        if (config->mode == MODE_GCM) {
+            printf("Info: No AAD provided, using empty AAD\n");
+        }
+    }
+
+    if (config->etm_mode && config->mode == MODE_ECB) {
+        fprintf(stderr, "Error: ETM mode is not supported for ECB mode\n");
+        config->etm_mode = 0;
+        config->aad_provided = 0;
     }
 
     if (strlen(config->input_file) == 0) {
@@ -410,4 +503,3 @@ int parse_arguments(int argc, char *argv[], config_t *config) {
 
     return 1;
 }
-

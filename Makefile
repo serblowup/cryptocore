@@ -1,20 +1,23 @@
 CC = gcc
-CFLAGS = -Iinclude -Wall -Wextra -std=c99 -g
+CFLAGS = -Iinclude -Wall -Wextra -std=c99 -g -O2
 LDFLAGS = -lssl -lcrypto
 
 SRC_DIR = src
 BUILD_DIR = build
 MODES_DIR = $(SRC_DIR)/modes
+AEAD_DIR = $(SRC_DIR)/aead
 HASH_DIR = $(SRC_DIR)/hash
 MAC_DIR = $(SRC_DIR)/mac
 TESTS_DIR = tests
 
 SRCS = $(SRC_DIR)/main.c $(SRC_DIR)/cli_parser.c $(SRC_DIR)/file_io.c $(SRC_DIR)/csprng.c \
        $(MODES_DIR)/ecb.c $(MODES_DIR)/cbc.c $(MODES_DIR)/cfb.c \
-       $(MODES_DIR)/ofb.c $(MODES_DIR)/ctr.c \
+       $(MODES_DIR)/ofb.c $(MODES_DIR)/ctr.c $(MODES_DIR)/gcm.c \
+       $(AEAD_DIR)/etm.c \
        $(HASH_DIR)/sha256.c $(HASH_DIR)/sha3_256.c \
        $(MAC_DIR)/hmac.c $(MAC_DIR)/cmac.c \
-       $(TESTS_DIR)/keys_tests.c $(TESTS_DIR)/nist_tests.c $(TESTS_DIR)/hash_tests.c $(TESTS_DIR)/mac_tests.c
+       $(TESTS_DIR)/keys_tests.c $(TESTS_DIR)/nist_tests.c $(TESTS_DIR)/hash_tests.c \
+       $(TESTS_DIR)/mac_tests.c $(TESTS_DIR)/aead_tests.c
 
 OBJS = $(SRCS:%.c=$(BUILD_DIR)/%.o)
 TARGET = cryptocore
@@ -32,12 +35,13 @@ $(BUILD_DIR)/%.o: %.c
 
 directories:
 	@mkdir -p $(BUILD_DIR)/$(MODES_DIR)
+	@mkdir -p $(BUILD_DIR)/$(AEAD_DIR)
 	@mkdir -p $(BUILD_DIR)/$(HASH_DIR)
 	@mkdir -p $(BUILD_DIR)/$(MAC_DIR)
 	@mkdir -p $(BUILD_DIR)/$(TESTS_DIR)
 
 clean:
-	rm -rf $(BUILD_DIR) $(TARGET) nist_test_data.bin *.tmp
+	rm -rf $(BUILD_DIR) $(TARGET) nist_test_data.bin *.tmp *.enc *.dec *.cmac
 
 test-keys: $(TARGET)
 	./$(TARGET) --input --test-keys
@@ -51,7 +55,10 @@ test-hash: $(TARGET)
 test-mac: $(TARGET)
 	./$(TARGET) --input --test-mac
 
-test-all: test-keys test-nist test-hash test-mac
+test-aead: $(TARGET)
+	./$(TARGET) --input --test-aead
+
+test-all: test-keys test-nist test-hash test-mac test-aead
 
 help:
 	@echo "Available targets:"
@@ -60,13 +67,12 @@ help:
 	@echo "  test-nist        - Generate 10MB file for NIST tests"
 	@echo "  test-hash        - Run hash function tests"
 	@echo "  test-mac         - Run MAC function tests"
+	@echo "  test-aead        - Run AEAD (GCM + ETM) tests"
 	@echo "  test-all         - Run all tests"
 	@echo "  clean            - Clean build artifacts"
 	@echo ""
 	@echo "Usage examples:"
-	@echo "  Encryption:      ./cryptocore --algorithm aes --mode cbc --encrypt --input file.txt"
-	@echo "  SHA-256 hash:    ./cryptocore dgst --algorithm sha256 --input document.pdf"
-	@echo "  HMAC-SHA-256:    ./cryptocore dgst --algorithm sha256 --hmac --key 00112233445566778899aabbccddeeff --input message.txt"
-	@echo "  AES-CMAC:        ./cryptocore dgst --algorithm aes --cmac --key 00112233445566778899aabbccddeeff --input message.txt --output message.cmac"
-	@echo "  HMAC verify:     ./cryptocore dgst --algorithm sha256 --hmac --key 00112233445566778899aabbccddeeff --input message.txt --verify expected.hmac"
-
+	@echo "  GCM Encryption:  ./cryptocore --algorithm aes --mode gcm --encrypt --key 00112233445566778899aabbccddeeff --input plain.txt --output cipher.bin --aad aabbccddeeff"
+	@echo "  GCM Decryption:  ./cryptocore --algorithm aes --mode gcm --decrypt --key 00112233445566778899aabbccddeeff --input cipher.bin --output decrypted.txt --aad aabbccddeeff"
+	@echo "  Run AEAD tests:  make test-aead"
+	

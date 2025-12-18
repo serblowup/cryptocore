@@ -10,6 +10,8 @@
 #include "../include/sha3_256.h"
 #include "../include/hmac.h"
 #include "../include/cmac.h"
+#include "../include/gcm.h"
+#include "../include/etm.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,6 +23,13 @@ void print_nist_instructions(void);
 void generate_random_iv(BYTE *iv) {
     if (generate_random_bytes(iv, IV_SIZE) != 1) {
         fprintf(stderr, "Fatal error: Failed to generate IV\n");
+        exit(EXIT_FAILURE);
+    }
+}
+
+void generate_random_nonce(BYTE *nonce) {
+    if (generate_random_bytes(nonce, GCM_NONCE_SIZE) != 1) {
+        fprintf(stderr, "Fatal error: Failed to generate nonce\n");
         exit(EXIT_FAILURE);
     }
 }
@@ -124,7 +133,6 @@ static int compute_hmac(config_t *config, const char *input_file, const char *ou
             success = 0;
         }
     } else {
-        // Convert digest to hex string
         for (size_t i = 0; i < 32; i++) {
             sprintf(mac_hex + (i * 2), "%02x", digest[i]);
         }
@@ -292,6 +300,87 @@ cleanup:
     return success;
 }
 
+static int handle_gcm_encryption(config_t *config, BYTE *input_data, size_t input_len,
+                                 BYTE **output_data, size_t *output_len) {
+    if (!config->nonce_provided) {
+        generate_random_nonce(config->nonce);
+    }
+
+    if (!gcm_encrypt_full(config->key,
+                         input_data, input_len,
+                         config->aad_provided ? config->aad_data : NULL,
+                         config->aad_len,
+                         output_data, output_len)) {
+        fprintf(stderr, "Error: GCM encryption failed\n");
+        return 0;
+    }
+
+    return 1;
+}
+
+static int handle_gcm_decryption(config_t *config, BYTE *input_data, size_t input_len,
+                                 BYTE **output_data, size_t *output_len) {
+    if (input_len < GCM_NONCE_SIZE + GCM_TAG_SIZE) {
+        fprintf(stderr, "Error: Input file too small for GCM (needs at least %d bytes for nonce + tag)\n",
+                GCM_NONCE_SIZE + GCM_TAG_SIZE);
+        return 0;
+    }
+
+    if (config->nonce_provided) {
+        printf("Using user-provided nonce via --iv\n");
+
+        if (!gcm_decrypt_full(config->key,
+                             input_data, input_len,
+                             config->aad_provided ? config->aad_data : NULL,
+                             config->aad_len,
+                             output_data, output_len)) {
+            fprintf(stderr, "Error: GCM authentication failed - AAD mismatch or ciphertext tampered\n");
+            return 0;
+        }
+    } else {
+        printf("Reading nonce from file (first 12 bytes)\n");
+
+        if (!gcm_decrypt_full(config->key,
+                             input_data, input_len,
+                             config->aad_provided ? config->aad_data : NULL,
+                             config->aad_len,
+                             output_data, output_len)) {
+            fprintf(stderr, "Error: GCM authentication failed - AAD mismatch or ciphertext tampered\n");
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+static int handle_etm_encryption(config_t *config, BYTE *input_data, size_t input_len,
+                                BYTE **output_data, size_t *output_len) {
+    if (!encrypt_then_mac(config->mode,
+                         config->key, AES_128_KEY_SIZE,
+                         input_data, input_len,
+                         config->aad_provided ? config->aad_data : NULL,
+                         config->aad_len,
+                         output_data, output_len)) {
+        fprintf(stderr, "Error: ETM encryption failed\n");
+        return 0;
+    }
+    return 1;
+}
+
+static int handle_etm_decryption(config_t *config, BYTE *input_data, size_t input_len,
+                                BYTE **output_data, size_t *output_len) {
+    if (!decrypt_then_verify(config->mode,
+                            config->key, AES_128_KEY_SIZE,
+                            input_data, input_len,
+                            config->aad_provided ? config->aad_data : NULL,
+                            config->aad_len,
+                            output_data, output_len)) {
+        fprintf(stderr, "Error: ETM authentication failed - AAD mismatch or ciphertext tampered\n");
+        return 0;
+    }
+    return 1;
+}
+
 int main(int argc, char *argv[]) {
     config_t config;
     BYTE *input_data = NULL;
@@ -336,6 +425,10 @@ int main(int argc, char *argv[]) {
         return run_all_mac_tests() ? 0 : 1;
     }
 
+    if (strcmp(config.input_file, "--test-aead") == 0) {
+        return run_aead_tests() ? 0 : 1;
+    }
+
     if (dgst_mode) {
         if (config.hmac_mode) {
             success = compute_hmac(&config, config.input_file,
@@ -362,6 +455,59 @@ int main(int argc, char *argv[]) {
     if (config.key_provided && is_weak_key(config.key, AES_128_KEY_SIZE)) {
         fprintf(stderr, "Warning: The provided key appears to be weak. Consider using a stronger key.\n");
     }
+
+    if (config.mode == MODE_GCM) {
+        if (config.operation == MODE_ENCRYPT) {
+            success = handle_gcm_encryption(&config, input_data, input_len, &output_data, &output_len);
+        } else {
+            success = handle_gcm_decryption(&config, input_data, input_len, &output_data, &output_len);
+        }
+
+        if (!success) {
+            goto cleanup;
+        }
+
+        if (!write_file(config.output_file, output_data, output_len)) {
+            fprintf(stderr, "Error: Cannot write output file '%s'\n", config.output_file);
+            goto cleanup;
+        }
+
+        printf("GCM %s completed successfully\n",
+               config.operation == MODE_ENCRYPT ? "encryption" : "decryption");
+        printf("Output written to: %s\n", config.output_file);
+
+        free(input_data);
+        if (output_data) free(output_data);
+        return 0;
+    } else if (config.etm_mode) {
+        if (config.operation == MODE_ENCRYPT) {
+            success = handle_etm_encryption(&config, input_data, input_len, &output_data, &output_len);
+        } else {
+            success = handle_etm_decryption(&config, input_data, input_len, &output_data, &output_len);
+        }
+
+        if (!success) {
+            goto cleanup;
+        }
+
+        if (!write_file(config.output_file, output_data, output_len)) {
+            fprintf(stderr, "Error: Cannot write output file '%s'\n", config.output_file);
+            goto cleanup;
+        }
+
+        printf("ETM (%s) %s completed successfully\n",
+               config.mode == MODE_CBC ? "CBC" :
+               config.mode == MODE_CTR ? "CTR" :
+               config.mode == MODE_CFB ? "CFB" : "OFB",
+               config.operation == MODE_ENCRYPT ? "encryption" : "decryption");
+        printf("Output written to: %s\n", config.output_file);
+
+        free(input_data);
+        if (output_data) free(output_data);
+        return 0;
+    }
+
+
 
     if (config.operation == MODE_ENCRYPT) {
         if (config.mode != MODE_ECB) {
@@ -474,4 +620,3 @@ cleanup:
 
     return success ? 0 : 1;
 }
-
