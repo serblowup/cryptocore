@@ -330,7 +330,7 @@
 10. **Подкоманда derive**
      
      1. **PBKDF2**
-         - *Ввод только пароля*__
+         - *Ввод только пароля*
          ```bash
          ./cryptocore derive --algorithm pbkdf2 --password 'MyPassword'
          Key Derivation Parameters:
@@ -343,7 +343,7 @@
          Deriving key... Done
          Result: c483d6d7b0e07e07af73c9816cc4c2bcaafbfd0b82081c1fb9df19105cb64c38 d1c624b88875f9e417fd15e13df199d3
          ```
-         - *Ввод пароля и соли в hex-формате*__
+         - *Ввод пароля и соли в hex-формате*
          ```bash
          ./cryptocore derive --algorithm pbkdf2 --password 'test' --salt a1b2c3d4e5f601234567890123456789
          DEBUG: Salt interpreted as hex string, length: 16 bytes
@@ -357,7 +357,7 @@
          Deriving key... Done
          Result: 6080c89692fc27a7e0af08716546e996c2c3bbbc72ca6490980261871ba72846 a1b2c3d4e5f601234567890123456789
          ```
-        - *Ввод пароля и соли в текстовом формате*__
+        - *Ввод пароля и соли в текстовом формате*
         ```bash
         ./cryptocore derive --algorithm pbkdf2 --password 'test' --salt 'my_salt_string'
         DEBUG: Salt interpreted as text string, length: 14 bytes
@@ -371,7 +371,7 @@
         Deriving key... Done
         Result: eab7d7ed229615d1950a6d1055ed80d1bd5c6068c20546c8a18185e009c7cf68 6d795f73616c745f737472696e67
         ```
-        - *Ввод пароля, соли и количества итераций*__
+        - *Ввод пароля, соли и количества итераций*
         ```bash
         ./cryptocore derive --algorithm pbkdf2 --password 'test' --salt 00000000000000000000000000000000 --iterations 500000
         DEBUG: Salt interpreted as hex string, length: 16 bytes
@@ -385,7 +385,7 @@
         Deriving key... Done
         Result: 885ef65ad253c80860b854e95afd74ce12b2aac4f726be8b9209e5fd59027532 00000000000000000000000000000000
         ```
-        - *Ввод пароля, соли и длины ключа*__
+        - *Ввод пароля, соли и длины ключа*
         ```bash
         ./cryptocore derive --algorithm pbkdf2 --password 'test' --salt 00000000000000000000000000000000 --length 48
         DEBUG: Salt interpreted as hex string, length: 16 bytes
@@ -399,7 +399,7 @@
         Deriving key... Done
         Result: da3a2737bbf7ddc300befff667a52ed11f95f79a0ff52f24d70890d6c7523c3d4dc362b6311067f4d95c83923a4b7b0a 00000000000000000000000000000000
         ```
-        - *Ввод всех параметров*__
+        - *Ввод всех параметров*
         ```bash
         ./cryptocore derive --algorithm pbkdf2 --password 'MySecurePass123!' --salt a1b2c3d4e5f601234567890123456789 --iterations 100000 --length 64
         DEBUG: Salt interpreted as hex string, length: 16 bytes
@@ -413,7 +413,7 @@
         Deriving key... Done
         Result: f861994b137441ac453a322674ed5101ebb6b43e31e3f0a46052bb85fa7e2a6f6c88cd5eaa799850f0076066baa9000521205de1b3cdf38711c67b1c858aa63c a1b2c3d4e5f601234567890123456789
         ```
-        - *Ввод всех параметров и сохранение в файл*__
+        - *Ввод всех параметров и сохранение в файл*
         ```bash
         ./cryptocore derive --algorithm pbkdf2 --password 'app_key' --salt 'fixedappsalt' --iterations 10000 --length 64 --output app_key.bin
         DEBUG: Salt interpreted as text string, length: 12 bytes
@@ -437,7 +437,7 @@
         ```
 
     2. **HKDF**
-        - *Минимальный ввод аргументов*__
+        - *Минимальный ввод аргументов*
         ```bash
         ./cryptocore derive --algorithm hkdf --master-key 00112233445566778899aabbccddeeff --context 'encryption'
         Key Derivation Parameters:
@@ -449,7 +449,7 @@
         Deriving key... Done
         Result: 422769d806a19fa40ba5e3785b1935153884e3450d1e5d4ba4db53068b27c317
         ```
-        - *Ввод длины ключа*__
+        - *Ввод длины ключа*
         ```bash
         ./cryptocore derive --algorithm hkdf --master-key 00112233445566778899aabbccddeeff --context 'authentication' --length 48
         Key Derivation Parameters:
@@ -461,7 +461,7 @@
         Deriving key... Done
         Result: 89ac28ebc04a105432d0bb6d1962567807b8e976c82b4b96fd8ea6e2037b338f14316ac45cfac6410e21620564c3b9cf
         ```
-        - *Ввод флага --key (вместо флага --master-key)__
+        - *Ввод флага --key (вместо флага --master-key)*
         ```bash
         ./cryptocore derive --algorithm hkdf --key 00112233445566778899aabbccddeeff --context 'encryption' --length 32
         Key Derivation Parameters:
@@ -513,7 +513,7 @@
     ```bash
     ./cryptocore --input --test-mac
     ```
-    - *Тесты режима GCM и режимов шифрования с аутентификацией и присоединенными данными*__
+    - *Тесты режима GCM и режимов шифрования с аутентификацией и присоединенными данными*
     ```bash
     ./cryptocore --input --test-aead
     ```
