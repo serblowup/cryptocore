@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <time.h>
 #include <openssl/evp.h>
 #include <openssl/aes.h>
 #include <openssl/rand.h>
@@ -24,12 +25,15 @@
 #define GCM_NONCE_SIZE 12
 #define GCM_TAG_SIZE 16
 #define MAX_AAD_SIZE 1024
+#define MAX_KDF_KEY_LENGTH 256
+#define MAX_SALT_LENGTH 64
 
 typedef unsigned char BYTE;
 
 typedef enum {
     MODE_ENCRYPT,
-    MODE_DECRYPT
+    MODE_DECRYPT,
+    MODE_DERIVE
 } operation_mode_t;
 
 typedef enum {
@@ -46,7 +50,9 @@ typedef enum {
     ALG_SHA256,
     ALG_SHA3_256,
     ALG_HMAC,
-    ALG_CMAC
+    ALG_CMAC,
+    ALG_PBKDF2,
+    ALG_HKDF
 } algorithm_t;
 
 typedef struct {
@@ -62,6 +68,15 @@ typedef struct {
     char output_file[MAX_PATH_LEN];
     char verify_file[MAX_PATH_LEN];
     char aad_hex[MAX_PATH_LEN];
+
+    char password[MAX_PATH_LEN];
+    char salt_hex[MAX_PATH_LEN * 2];
+    unsigned int iterations;
+    size_t key_length;
+    size_t salt_len;
+    BYTE salt_data[MAX_SALT_LENGTH];
+    char kdf_algorithm[MAX_PATH_LEN];
+
     int iv_provided;
     int nonce_provided;
     int aad_provided;
@@ -72,6 +87,10 @@ typedef struct {
     int verify_mode;
     int gcm_mode;
     int etm_mode;
+
+    int salt_provided;
+    int password_provided;
+    int derive_mode;
 } config_t;
 
 int generate_random_bytes(uint8_t* buffer, size_t num_bytes);
@@ -83,6 +102,7 @@ int generate_nist_test_file(const char* filename, size_t size_bytes);
 int parse_arguments(int argc, char *argv[], config_t *config);
 void print_usage(const char *program_name);
 int hex_string_to_bytes(const char *hex_string, BYTE *bytes, size_t bytes_len);
+int is_hex_string(const char *str);  // <-- НОВАЯ ФУНКЦИЯ
 void print_hex(const BYTE *data, size_t len);
 int read_file(const char *filename, BYTE **data, size_t *data_len);
 int write_file(const char *filename, const BYTE *data, size_t data_len);
@@ -132,5 +152,6 @@ void xor_blocks(const BYTE *a, const BYTE *b, BYTE *result, size_t len);
 int run_hash_tests(void);
 int run_all_mac_tests(void);
 int run_aead_tests(void);
+int run_all_kdf_tests(void);
 
 #endif /* MAIN_H */

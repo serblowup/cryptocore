@@ -48,9 +48,13 @@
 
 3. **CFB**
     - *Шифруем*  
-    ./cryptocore --algorithm aes --mode cfb --encrypt --key 000102030405060708090a0b0c0d0e0f --input "/home/sergey/cryptocore/cryptocore/tests/Primer.txt" --output cfb_cipher.bin  
+    ```bash
+    ./cryptocore --algorithm aes --mode cfb --encrypt --key 000102030405060708090a0b0c0d0e0f --input "/home/sergey/cryptocore/cryptocore/tests/Primer.txt" --output cfb_cipher.bin
+    ```
     - *Дешифруем*  
+    ```bash
     ./cryptocore --algorithm aes --mode cfb --decrypt --key 000102030405060708090a0b0c0d0e0f --input cfb_cipher.bin --output cfb_decrypted.txt
+    ```
 
 4. **OFB**
     - *Шифруем*  
@@ -323,8 +327,174 @@
         CMAC computed for 103 bytes from '/home/sergey/Рабочий стол/Primer3.txt'  
         [OK] CMAC verification successful
         ```
+10. **Подкоманда derive**
+     
+     1. **PBKDF2**
+         - *Ввод только пароля*__
+         ```bash
+         ./cryptocore derive --algorithm pbkdf2 --password 'MyPassword'
+         Key Derivation Parameters:
+           Algorithm:   pbkdf2
+           Iterations:  100000
+           Key Length:  32 bytes
+           Mode:        PBKDF2-HMAC-SHA256
+           Salt:        Randomly generated (16 bytes)
+           Password:    Provided (10 characters)
+         Deriving key... Done
+         Result: c483d6d7b0e07e07af73c9816cc4c2bcaafbfd0b82081c1fb9df19105cb64c38 d1c624b88875f9e417fd15e13df199d3
+         ```
+         - *Ввод пароля и соли в hex-формате*__
+         ```bash
+         ./cryptocore derive --algorithm pbkdf2 --password 'test' --salt a1b2c3d4e5f601234567890123456789
+         DEBUG: Salt interpreted as hex string, length: 16 bytes
+         Key Derivation Parameters:
+           Algorithm:   pbkdf2
+           Iterations:  100000
+           Key Length:  32 bytes
+           Mode:        PBKDF2-HMAC-SHA256
+           Salt:        Provided (a1b2c3d4e5f601234567890123456789, 16 bytes)
+           Password:    Provided (4 characters)
+         Deriving key... Done
+         Result: 6080c89692fc27a7e0af08716546e996c2c3bbbc72ca6490980261871ba72846 a1b2c3d4e5f601234567890123456789
+         ```
+        - *Ввод пароля и соли в текстовом формате*__
+        ```bash
+        ./cryptocore derive --algorithm pbkdf2 --password 'test' --salt 'my_salt_string'
+        DEBUG: Salt interpreted as text string, length: 14 bytes
+        Key Derivation Parameters:
+          Algorithm:   pbkdf2
+          Iterations:  100000
+          Key Length:  32 bytes
+          Mode:        PBKDF2-HMAC-SHA256
+          Salt:        Provided (6d795f73616c745f737472696e67, 14 bytes)
+          Password:    Provided (4 characters)
+        Deriving key... Done
+        Result: eab7d7ed229615d1950a6d1055ed80d1bd5c6068c20546c8a18185e009c7cf68 6d795f73616c745f737472696e67
+        ```
+        - *Ввод пароля, соли и количества итераций*__
+        ```bash
+        ./cryptocore derive --algorithm pbkdf2 --password 'test' --salt 00000000000000000000000000000000 --iterations 500000
+        DEBUG: Salt interpreted as hex string, length: 16 bytes
+        Key Derivation Parameters:
+          Algorithm:   pbkdf2
+          Iterations:  500000
+          Key Length:  32 bytes
+          Mode:        PBKDF2-HMAC-SHA256
+          Salt:        Provided (00000000000000000000000000000000, 16 bytes)
+          Password:    Provided (4 characters)
+        Deriving key... Done
+        Result: 885ef65ad253c80860b854e95afd74ce12b2aac4f726be8b9209e5fd59027532 00000000000000000000000000000000
+        ```
+        - *Ввод пароля, соли и длины ключа*__
+        ```bash
+        ./cryptocore derive --algorithm pbkdf2 --password 'test' --salt 00000000000000000000000000000000 --length 48
+        DEBUG: Salt interpreted as hex string, length: 16 bytes
+        Key Derivation Parameters:
+          Algorithm:   pbkdf2
+          Iterations:  100000
+          Key Length:  48 bytes
+          Mode:        PBKDF2-HMAC-SHA256
+          Salt:        Provided (00000000000000000000000000000000, 16 bytes)
+          Password:    Provided (4 characters)
+        Deriving key... Done
+        Result: da3a2737bbf7ddc300befff667a52ed11f95f79a0ff52f24d70890d6c7523c3d4dc362b6311067f4d95c83923a4b7b0a 00000000000000000000000000000000
+        ```
+        - *Ввод всех параметров*__
+        ```bash
+        ./cryptocore derive --algorithm pbkdf2 --password 'MySecurePass123!' --salt a1b2c3d4e5f601234567890123456789 --iterations 100000 --length 64
+        DEBUG: Salt interpreted as hex string, length: 16 bytes
+        Key Derivation Parameters:
+          Algorithm:   pbkdf2
+          Iterations:  100000
+          Key Length:  64 bytes
+          Mode:        PBKDF2-HMAC-SHA256
+          Salt:        Provided (a1b2c3d4e5f601234567890123456789, 16 bytes)
+          Password:    Provided (16 characters)
+        Deriving key... Done
+        Result: f861994b137441ac453a322674ed5101ebb6b43e31e3f0a46052bb85fa7e2a6f6c88cd5eaa799850f0076066baa9000521205de1b3cdf38711c67b1c858aa63c a1b2c3d4e5f601234567890123456789
+        ```
+        - *Ввод всех параметров и сохранение в файл*__
+        ```bash
+        ./cryptocore derive --algorithm pbkdf2 --password 'app_key' --salt 'fixedappsalt' --iterations 10000 --length 64 --output app_key.bin
+        DEBUG: Salt interpreted as text string, length: 12 bytes
+        Key Derivation Parameters:
+          Algorithm:   pbkdf2
+          Iterations:  10000
+          Key Length:  64 bytes
+          Mode:        PBKDF2-HMAC-SHA256
+          Salt:        Provided (666978656461707073616c74, 12 bytes)
+          Password:    Provided (7 characters)
+        Deriving key... Done
+        Result: 63f623c88aab4cdff5e299272e3fd6d1d7e02136a7aecff314444003c0d450eb17074d8af05895f0cdea5625a11b526810faad214d0a6a7c2d2e2a2a10f6413a 666978656461707073616c74
+        Key written to: app_key.bin (64 bytes)
+
+        ls -la app_key.bin
+        -rw-r--r-- 1 sergey sergey 64 дек 20 16:50 app_key.bin
+
+        xxd app_key.bin | head -2
+        00000000: 63f6 23c8 8aab 4cdf f5e2 9927 2e3f d6d1  c.#...L....'.?..
+        00000010: d7e0 2136 a7ae cff3 1444 4003 c0d4 50eb  ..!6.....D@...P.
+        ```
+
+    2. **HKDF**
+        - *Минимальный ввод аргументов*__
+        ```bash
+        ./cryptocore derive --algorithm hkdf --master-key 00112233445566778899aabbccddeeff --context 'encryption'
+        Key Derivation Parameters:
+          Algorithm:   hkdf
+          Iterations:  100000
+          Key Length:  32 bytes
+          Mode:        HKDF
+          Context:     encryption
+        Deriving key... Done
+        Result: 422769d806a19fa40ba5e3785b1935153884e3450d1e5d4ba4db53068b27c317
+        ```
+        - *Ввод длины ключа*__
+        ```bash
+        ./cryptocore derive --algorithm hkdf --master-key 00112233445566778899aabbccddeeff --context 'authentication' --length 48
+        Key Derivation Parameters:
+          Algorithm:   hkdf
+          Iterations:  100000
+          Key Length:  48 bytes
+          Mode:        HKDF
+          Context:     authentication
+        Deriving key... Done
+        Result: 89ac28ebc04a105432d0bb6d1962567807b8e976c82b4b96fd8ea6e2037b338f14316ac45cfac6410e21620564c3b9cf
+        ```
+        - *Ввод флага --key (вместо флага --master-key)__
+        ```bash
+        ./cryptocore derive --algorithm hkdf --key 00112233445566778899aabbccddeeff --context 'encryption' --length 32
+        Key Derivation Parameters:
+          Algorithm:   hkdf
+          Iterations:  100000
+          Key Length:  32 bytes
+          Mode:        HKDF
+          Context:     encryption
+        Deriving key... Done
+        Result: 422769d806a19fa40ba5e3785b1935153884e3450d1e5d4ba4db53068b27c317
+        ```
+        - *Ввод всех параметров и сохранение в файл*
+        ```bash
+        ./cryptocore derive --algorithm hkdf --master-key 00112233445566778899aabbccddeeff --context 'database_key' --length 32 --output hkdf_key.bin
+        Key Derivation Parameters:
+          Algorithm:   hkdf
+          Iterations:  100000
+          Key Length:  32 bytes
+          Mode:        HKDF
+          Context:     database_key
+        Deriving key... Done
+        Result: 7bd46e328cf041f4c537a3b74d69c3bfbe33925311ae946c0e994d7f612dfdce
+        Key written to: hkdf_key.bin (32 bytes)
         
-10. **Запуск тестов**
+        ls -la hkdf_key.bin
+        -rw-r--r-- 1 sergey sergey 32 дек 20 16:54 hkdf_key.bin
+        
+        xxd hkdf_key.bin | head -2
+        00000000: 7bd4 6e32 8cf0 41f4 c537 a3b7 4d69 c3bf  {.n2..A..7..Mi..
+        00000010: be33 9253 11ae 946c 0e99 4d7f 612d fdce  .3.S...l..M.a-..
+        ```
+        
+11. **Запуск тестов**
     - *Тесты генератора ключей*  
     ```bash
     ./cryptocore --input --test-keys
@@ -343,9 +513,13 @@
     ```bash
     ./cryptocore --input --test-mac
     ```
-    - *Тесты режима GCM и режимов шифрования с аутентификацией и присоединенными данными*
+    - *Тесты режима GCM и режимов шифрования с аутентификацией и присоединенными данными*__
     ```bash
     ./cryptocore --input --test-aead
+    ```
+    - *Тесты функций формирования ключа (KDF)*
+    ```bash
+    ./cryptocore --input --test-kdf
     ```
     
 ##### Совместимость с OpenSSL:
@@ -367,7 +541,7 @@
     ```bash
     openssl enc -aes-128-cbc -K 000102030405060708090A0B0C0D0E0F -iv AABBCCDDEEFF00112233445566778899 -in "/home/sergey/cryptocore/cryptocore/tests/Primer.txt" -out openssl_cipher.bin
     ```
-    - *Дешифруем*__
+    - *Дешифруем*
     ```bash
     ./cryptocore --algorithm aes --mode cbc --decrypt --key 000102030405060708090A0B0C0D0E0F --iv AABBCCDDEEFF00112233445566778899 --input openssl_cipher.bin --output decrypted.txt
     ```

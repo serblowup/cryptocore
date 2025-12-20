@@ -12,6 +12,8 @@
 #include "../include/cmac.h"
 #include "../include/gcm.h"
 #include "../include/etm.h"
+#include "../include/pbkdf2.h"
+#include "../include/hkdf.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -48,7 +50,6 @@ void print_hex(const BYTE *data, size_t len) {
     for (size_t i = 0; i < len; i++) {
         printf("%02x", data[i]);
     }
-    printf("\n");
 }
 
 int detect_file_format(const BYTE *data, size_t data_len, cipher_mode_t mode, const BYTE *user_iv) {
@@ -381,6 +382,115 @@ static int handle_etm_decryption(config_t *config, BYTE *input_data, size_t inpu
     return 1;
 }
 
+static int handle_kdf_derivation(config_t *config) {
+    BYTE derived_key[MAX_KDF_KEY_LENGTH];
+    BYTE password_bytes[MAX_PATH_LEN];
+    size_t password_len = 0;
+
+    printf("Key Derivation Parameters:\n");
+    printf("  Algorithm:   %s\n", config->kdf_algorithm);
+    printf("  Iterations:  %u\n", config->iterations);
+    printf("  Key Length:  %zu bytes\n", config->key_length);
+
+    if (config->algorithm == ALG_PBKDF2) {
+        printf("  Mode:        PBKDF2-HMAC-SHA256\n");
+
+        password_len = strlen(config->password);
+        if (password_len >= MAX_PATH_LEN) {
+            fprintf(stderr, "Error: Password too long\n");
+            return 0;
+        }
+        memcpy(password_bytes, config->password, password_len);
+
+        if (config->salt_provided) {
+            printf("  Salt:        Provided (%s, %zu bytes)\n",
+                   config->salt_hex, config->salt_len);
+        } else {
+            config->salt_len = 16;
+            if (generate_random_bytes(config->salt_data, config->salt_len) != 1) {
+                fprintf(stderr, "Error: Failed to generate random salt\n");
+                return 0;
+            }
+
+            for (size_t i = 0; i < config->salt_len; i++) {
+                sprintf(config->salt_hex + (i * 2), "%02x", config->salt_data[i]);
+            }
+            config->salt_hex[config->salt_len * 2] = '\0';
+
+            printf("  Salt:        Randomly generated (%zu bytes)\n", config->salt_len);
+        }
+
+        printf("  Password:    Provided (%zu characters)\n", password_len);
+        printf("Deriving key... ");
+        fflush(stdout);
+
+        if (!pbkdf2_hmac_sha256(password_bytes, password_len,
+                               config->salt_data, config->salt_len,
+                               config->iterations,
+                               config->key_length,
+                               derived_key)) {
+            fprintf(stderr, "Error: PBKDF2 derivation failed\n");
+            return 0;
+        }
+
+        printf("Done\n");
+
+    } else if (config->algorithm == ALG_HKDF) {
+        printf("  Mode:        HKDF\n");
+
+        if (!config->key_provided) {
+            fprintf(stderr, "Error: Master key required for HKDF\n");
+            return 0;
+        }
+
+        password_len = strlen(config->password);
+        if (password_len == 0) {
+            fprintf(stderr, "Error: Context string required for HKDF\n");
+            return 0;
+        }
+
+        printf("  Context:     %s\n", config->password);
+        printf("Deriving key... ");
+        fflush(stdout);
+
+        if (!derive_key_from_master(config->key, AES_128_KEY_SIZE,
+                                   config->password,
+                                   config->key_length,
+                                   derived_key)) {
+            fprintf(stderr, "Error: HKDF derivation failed\n");
+            return 0;
+        }
+
+        printf("Done\n");
+        config->salt_len = 0;
+        memset(config->salt_data, 0, sizeof(config->salt_data));
+        memset(config->salt_hex, 0, sizeof(config->salt_hex));
+
+    } else {
+        fprintf(stderr, "Error: Unsupported KDF algorithm\n");
+        return 0;
+    }
+
+    printf("Result: ");
+    print_hex(derived_key, config->key_length);
+    printf(" ");
+    print_hex(config->salt_data, config->salt_len);
+    printf("\n");
+
+    if (strlen(config->output_file) > 0) {
+        if (!write_file(config->output_file, derived_key, config->key_length)) {
+            fprintf(stderr, "Error: Cannot write key to file '%s'\n", config->output_file);
+            return 0;
+        }
+        printf("Key written to: %s (%zu bytes)\n", config->output_file, config->key_length);
+    }
+
+    memset(password_bytes, 0, sizeof(password_bytes));
+    memset(derived_key, 0, sizeof(derived_key));
+
+    return 1;
+}
+
 int main(int argc, char *argv[]) {
     config_t config;
     BYTE *input_data = NULL;
@@ -389,12 +499,17 @@ int main(int argc, char *argv[]) {
     size_t input_len, output_len;
     int success = 0;
     int dgst_mode = 0;
+    int derive_mode = 0;
 
     OPENSSL_init_ssl(0, NULL);
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "dgst") == 0) {
             dgst_mode = 1;
+            break;
+        }
+        if (strcmp(argv[i], "derive") == 0) {
+            derive_mode = 1;
             break;
         }
     }
@@ -429,190 +544,199 @@ int main(int argc, char *argv[]) {
         return run_aead_tests() ? 0 : 1;
     }
 
-    if (dgst_mode) {
-        if (config.hmac_mode) {
-            success = compute_hmac(&config, config.input_file,
-                                strlen(config.output_file) > 0 ? config.output_file : NULL,
-                                strlen(config.verify_file) > 0 ? config.verify_file : NULL);
-        } else if (config.cmac_mode) {
-            success = compute_cmac(&config, config.input_file,
-                                 strlen(config.output_file) > 0 ? config.output_file : NULL,
-                                 strlen(config.verify_file) > 0 ? config.verify_file : NULL);
-        } else if (config.algorithm == ALG_SHA256 || config.algorithm == ALG_SHA3_256) {
-            success = compute_hash(config.algorithm, config.input_file,
-                                 strlen(config.output_file) > 0 ? config.output_file : NULL);
-        } else {
-            fprintf(stderr, "Error: Unsupported algorithm for dgst command\n");
-        }
+    if (strcmp(config.input_file, "--test-kdf") == 0) {
+        return run_all_kdf_tests() ? 0 : 1;
+    }
+
+    if (derive_mode) {
+        success = handle_kdf_derivation(&config);
         goto cleanup;
     }
 
-    if (!read_file(config.input_file, &input_data, &input_len)) {
-        fprintf(stderr, "Error: Cannot read input file '%s'\n", config.input_file);
-        return 1;
-    }
+    if (dgst_mode) {
+            if (config.hmac_mode) {
+                success = compute_hmac(&config, config.input_file,
+                                    strlen(config.output_file) > 0 ? config.output_file : NULL,
+                                    strlen(config.verify_file) > 0 ? config.verify_file : NULL);
+            } else if (config.cmac_mode) {
+                success = compute_cmac(&config, config.input_file,
+                                     strlen(config.output_file) > 0 ? config.output_file : NULL,
+                                     strlen(config.verify_file) > 0 ? config.verify_file : NULL);
+            } else if (config.algorithm == ALG_SHA256 || config.algorithm == ALG_SHA3_256) {
+                success = compute_hash(config.algorithm, config.input_file,
+                                     strlen(config.output_file) > 0 ? config.output_file : NULL);
+            } else {
+                fprintf(stderr, "Error: Unsupported algorithm for dgst command\n");
+            }
+            goto cleanup;
+        }
 
-    if (config.key_provided && is_weak_key(config.key, AES_128_KEY_SIZE)) {
-        fprintf(stderr, "Warning: The provided key appears to be weak. Consider using a stronger key.\n");
-    }
+        if (!read_file(config.input_file, &input_data, &input_len)) {
+            fprintf(stderr, "Error: Cannot read input file '%s'\n", config.input_file);
+            return 1;
+        }
 
-    if (config.mode == MODE_GCM) {
+        if (config.key_provided && is_weak_key(config.key, AES_128_KEY_SIZE)) {
+            fprintf(stderr, "Warning: The provided key appears to be weak. Consider using a stronger key.\n");
+        }
+
+        if (config.mode == MODE_GCM) {
+            if (config.operation == MODE_ENCRYPT) {
+                success = handle_gcm_encryption(&config, input_data, input_len, &output_data, &output_len);
+            } else {
+                success = handle_gcm_decryption(&config, input_data, input_len, &output_data, &output_len);
+            }
+
+            if (!success) {
+                goto cleanup;
+            }
+
+            if (!write_file(config.output_file, output_data, output_len)) {
+                fprintf(stderr, "Error: Cannot write output file '%s'\n", config.output_file);
+                goto cleanup;
+            }
+
+            printf("GCM %s completed successfully\n",
+                   config.operation == MODE_ENCRYPT ? "encryption" : "decryption");
+            printf("Output written to: %s\n", config.output_file);
+
+            free(input_data);
+            if (output_data) free(output_data);
+            return 0;
+        } else if (config.etm_mode) {
+            if (config.operation == MODE_ENCRYPT) {
+                success = handle_etm_encryption(&config, input_data, input_len, &output_data, &output_len);
+            } else {
+                success = handle_etm_decryption(&config, input_data, input_len, &output_data, &output_len);
+            }
+
+            if (!success) {
+                goto cleanup;
+            }
+
+            if (!write_file(config.output_file, output_data, output_len)) {
+                fprintf(stderr, "Error: Cannot write output file '%s'\n", config.output_file);
+                goto cleanup;
+            }
+
+            printf("ETM (%s) %s completed successfully\n",
+                   config.mode == MODE_CBC ? "CBC" :
+                   config.mode == MODE_CTR ? "CTR" :
+                   config.mode == MODE_CFB ? "CFB" : "OFB",
+                   config.operation == MODE_ENCRYPT ? "encryption" : "decryption");
+            printf("Output written to: %s\n", config.output_file);
+
+            free(input_data);
+            if (output_data) free(output_data);
+            return 0;
+        }
+
+
+
         if (config.operation == MODE_ENCRYPT) {
-            success = handle_gcm_encryption(&config, input_data, input_len, &output_data, &output_len);
+            if (config.mode != MODE_ECB) {
+                generate_random_iv(actual_iv);
+            }
         } else {
-            success = handle_gcm_decryption(&config, input_data, input_len, &output_data, &output_len);
-        }
+            if (config.mode == MODE_ECB) {
+            } else if (config.iv_provided) {
+                memcpy(actual_iv, config.iv, IV_SIZE);
 
-        if (!success) {
-            goto cleanup;
-        }
+                int is_our_format = detect_file_format(input_data, input_len, config.mode, config.iv);
 
-        if (!write_file(config.output_file, output_data, output_len)) {
-            fprintf(stderr, "Error: Cannot write output file '%s'\n", config.output_file);
-            goto cleanup;
-        }
-
-        printf("GCM %s completed successfully\n",
-               config.operation == MODE_ENCRYPT ? "encryption" : "decryption");
-        printf("Output written to: %s\n", config.output_file);
-
-        free(input_data);
-        if (output_data) free(output_data);
-        return 0;
-    } else if (config.etm_mode) {
-        if (config.operation == MODE_ENCRYPT) {
-            success = handle_etm_encryption(&config, input_data, input_len, &output_data, &output_len);
-        } else {
-            success = handle_etm_decryption(&config, input_data, input_len, &output_data, &output_len);
-        }
-
-        if (!success) {
-            goto cleanup;
-        }
-
-        if (!write_file(config.output_file, output_data, output_len)) {
-            fprintf(stderr, "Error: Cannot write output file '%s'\n", config.output_file);
-            goto cleanup;
-        }
-
-        printf("ETM (%s) %s completed successfully\n",
-               config.mode == MODE_CBC ? "CBC" :
-               config.mode == MODE_CTR ? "CTR" :
-               config.mode == MODE_CFB ? "CFB" : "OFB",
-               config.operation == MODE_ENCRYPT ? "encryption" : "decryption");
-        printf("Output written to: %s\n", config.output_file);
-
-        free(input_data);
-        if (output_data) free(output_data);
-        return 0;
-    }
-
-
-
-    if (config.operation == MODE_ENCRYPT) {
-        if (config.mode != MODE_ECB) {
-            generate_random_iv(actual_iv);
-        }
-    } else {
-        if (config.mode == MODE_ECB) {
-        } else if (config.iv_provided) {
-            memcpy(actual_iv, config.iv, IV_SIZE);
-
-            int is_our_format = detect_file_format(input_data, input_len, config.mode, config.iv);
-
-            if (is_our_format) {
+                if (is_our_format) {
+                    memmove(input_data, input_data + IV_SIZE, input_len - IV_SIZE);
+                    input_len -= IV_SIZE;
+                    printf("Removed IV from file\n");
+                } else {
+                    printf("Using full file as ciphertext (OpenSSL format)\n");
+                }
+            } else {
+                if (input_len < IV_SIZE) {
+                    fprintf(stderr, "Error: Input file too short to contain IV\n");
+                    goto cleanup;
+                }
+                memcpy(actual_iv, input_data, IV_SIZE);
                 memmove(input_data, input_data + IV_SIZE, input_len - IV_SIZE);
                 input_len -= IV_SIZE;
-                printf("Removed IV from file\n");
-            } else {
-                printf("Using full file as ciphertext (OpenSSL format)\n");
+                printf("Read IV from file\n");
+            }
+        }
+
+        int result = 0;
+        if (config.operation == MODE_ENCRYPT) {
+            switch (config.mode) {
+                case MODE_ECB:
+                    result = ecb_encrypt(config.key, input_data, input_len, &output_data, &output_len);
+                    break;
+                case MODE_CBC:
+                    result = cbc_encrypt(config.key, actual_iv, input_data, input_len, &output_data, &output_len);
+                    break;
+                case MODE_CFB:
+                    result = cfb_encrypt(config.key, actual_iv, input_data, input_len, &output_data, &output_len);
+                    break;
+                case MODE_OFB:
+                    result = ofb_encrypt(config.key, actual_iv, input_data, input_len, &output_data, &output_len);
+                    break;
+                case MODE_CTR:
+                    result = ctr_encrypt(config.key, actual_iv, input_data, input_len, &output_data, &output_len);
+                    break;
+                default:
+                    fprintf(stderr, "Error: Unsupported mode for encryption\n");
+                    goto cleanup;
             }
         } else {
-            if (input_len < IV_SIZE) {
-                fprintf(stderr, "Error: Input file too short to contain IV\n");
+            switch (config.mode) {
+                case MODE_ECB:
+                    result = ecb_decrypt(config.key, input_data, input_len, &output_data, &output_len);
+                    break;
+                case MODE_CBC:
+                    result = cbc_decrypt(config.key, actual_iv, input_data, input_len, &output_data, &output_len);
+                    break;
+                case MODE_CFB:
+                    result = cfb_decrypt(config.key, actual_iv, input_data, input_len, &output_data, &output_len);
+                    break;
+                case MODE_OFB:
+                    result = ofb_decrypt(config.key, actual_iv, input_data, input_len, &output_data, &output_len);
+                    break;
+                case MODE_CTR:
+                    result = ctr_decrypt(config.key, actual_iv, input_data, input_len, &output_data, &output_len);
+                    break;
+                default:
+                    fprintf(stderr, "Error: Unsupported mode for decryption\n");
+                    goto cleanup;
+            }
+        }
+
+        if (!result) {
+            fprintf(stderr, "Error: %s failed\n", config.operation == MODE_ENCRYPT ? "Encryption" : "Decryption");
+            goto cleanup;
+        }
+
+        if (config.operation == MODE_ENCRYPT && config.mode != MODE_ECB) {
+            BYTE *final_output = malloc(IV_SIZE + output_len);
+            if (!final_output) {
+                fprintf(stderr, "Error: Memory allocation failed\n");
                 goto cleanup;
             }
-            memcpy(actual_iv, input_data, IV_SIZE);
-            memmove(input_data, input_data + IV_SIZE, input_len - IV_SIZE);
-            input_len -= IV_SIZE;
-            printf("Read IV from file\n");
-        }
-    }
+            memcpy(final_output, actual_iv, IV_SIZE);
+            memcpy(final_output + IV_SIZE, output_data, output_len);
 
-    int result = 0;
-    if (config.operation == MODE_ENCRYPT) {
-        switch (config.mode) {
-            case MODE_ECB:
-                result = ecb_encrypt(config.key, input_data, input_len, &output_data, &output_len);
-                break;
-            case MODE_CBC:
-                result = cbc_encrypt(config.key, actual_iv, input_data, input_len, &output_data, &output_len);
-                break;
-            case MODE_CFB:
-                result = cfb_encrypt(config.key, actual_iv, input_data, input_len, &output_data, &output_len);
-                break;
-            case MODE_OFB:
-                result = ofb_encrypt(config.key, actual_iv, input_data, input_len, &output_data, &output_len);
-                break;
-            case MODE_CTR:
-                result = ctr_encrypt(config.key, actual_iv, input_data, input_len, &output_data, &output_len);
-                break;
-            default:
-                fprintf(stderr, "Error: Unsupported mode for encryption\n");
+            if (!write_file(config.output_file, final_output, IV_SIZE + output_len)) {
+                fprintf(stderr, "Error: Cannot write output file '%s'\n", config.output_file);
+                free(final_output);
                 goto cleanup;
-        }
-    } else {
-        switch (config.mode) {
-            case MODE_ECB:
-                result = ecb_decrypt(config.key, input_data, input_len, &output_data, &output_len);
-                break;
-            case MODE_CBC:
-                result = cbc_decrypt(config.key, actual_iv, input_data, input_len, &output_data, &output_len);
-                break;
-            case MODE_CFB:
-                result = cfb_decrypt(config.key, actual_iv, input_data, input_len, &output_data, &output_len);
-                break;
-            case MODE_OFB:
-                result = ofb_decrypt(config.key, actual_iv, input_data, input_len, &output_data, &output_len);
-                break;
-            case MODE_CTR:
-                result = ctr_decrypt(config.key, actual_iv, input_data, input_len, &output_data, &output_len);
-                break;
-            default:
-                fprintf(stderr, "Error: Unsupported mode for decryption\n");
-                goto cleanup;
-        }
-    }
-
-    if (!result) {
-        fprintf(stderr, "Error: %s failed\n", config.operation == MODE_ENCRYPT ? "Encryption" : "Decryption");
-        goto cleanup;
-    }
-
-    if (config.operation == MODE_ENCRYPT && config.mode != MODE_ECB) {
-        BYTE *final_output = malloc(IV_SIZE + output_len);
-        if (!final_output) {
-            fprintf(stderr, "Error: Memory allocation failed\n");
-            goto cleanup;
-        }
-        memcpy(final_output, actual_iv, IV_SIZE);
-        memcpy(final_output + IV_SIZE, output_data, output_len);
-
-        if (!write_file(config.output_file, final_output, IV_SIZE + output_len)) {
-            fprintf(stderr, "Error: Cannot write output file '%s'\n", config.output_file);
+            }
             free(final_output);
-            goto cleanup;
+        } else {
+            if (!write_file(config.output_file, output_data, output_len)) {
+                fprintf(stderr, "Error: Cannot write output file '%s'\n", config.output_file);
+                goto cleanup;
+            }
         }
-        free(final_output);
-    } else {
-        if (!write_file(config.output_file, output_data, output_len)) {
-            fprintf(stderr, "Error: Cannot write output file '%s'\n", config.output_file);
-            goto cleanup;
-        }
-    }
 
-    printf("Success: %s -> %s\n", config.input_file, config.output_file);
-    success = 1;
+        printf("Success: %s -> %s\n", config.input_file, config.output_file);
+        success = 1;
 
 cleanup:
     if (input_data) free(input_data);

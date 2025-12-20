@@ -10,6 +10,8 @@
 #include "../include/sha3_256.h"
 #include "../include/hmac.h"
 #include "../include/cmac.h"
+#include "../include/pbkdf2.h"
+#include "../include/hkdf.h"
 #include <string.h>
 #include <ctype.h>
 
@@ -19,6 +21,7 @@ void print_usage(const char *program_name) {
     fprintf(stderr, "  Hashing: %s dgst --algorithm ALGORITHM --input INPUT_FILE [--output OUTPUT_FILE]\n", program_name);
     fprintf(stderr, "  HMAC: %s dgst --algorithm sha256 --hmac --key KEY --input INPUT_FILE [--output OUTPUT_FILE] [--verify VERIFY_FILE]\n", program_name);
     fprintf(stderr, "  CMAC: %s dgst --algorithm aes --cmac --key KEY --input INPUT_FILE [--output OUTPUT_FILE] [--verify VERIFY_FILE]\n", program_name);
+    fprintf(stderr, "  Key Derivation: %s derive --algorithm pbkdf2 [OPTIONS]\n", program_name);
     fprintf(stderr, "  Testing: %s --input TEST_COMMAND\n", program_name);
     fprintf(stderr, "\nEncryption/Decryption Arguments:\n");
     fprintf(stderr, "  --algorithm ALGORITHM    Cipher algorithm (only 'aes' supported)\n");
@@ -52,12 +55,24 @@ void print_usage(const char *program_name) {
     fprintf(stderr, "  --input INPUT_FILE       Input file path\n");
     fprintf(stderr, "  --output OUTPUT_FILE     Output file path (optional)\n");
     fprintf(stderr, "  --verify VERIFY_FILE     Verify against CMAC in file\n");
+    fprintf(stderr, "\nKey Derivation Arguments:\n");  // <-- НОВОЕ
+    fprintf(stderr, "  derive                   Derive key from password\n");
+    fprintf(stderr, "  --algorithm ALGORITHM    KDF algorithm (pbkdf2, hkdf)\n");
+    fprintf(stderr, "  --password PASSWORD      Password string (use quotes if contains spaces)\n");
+    fprintf(stderr, "  --salt SALT              Salt as hexadecimal string (32 chars for 16 bytes)\n");
+    fprintf(stderr, "                           If not provided, random 16-byte salt will be generated\n");
+    fprintf(stderr, "  --iterations COUNT       Iteration count (default: 100000)\n");
+    fprintf(stderr, "  --length LENGTH          Key length in bytes (default: 32)\n");
+    fprintf(stderr, "  --output FILE            Write derived key to file as raw bytes (optional)\n");
+    fprintf(stderr, "  --master-key KEY         Master key for HKDF (hexadecimal string)\n");
+    fprintf(stderr, "  --context CONTEXT        Context string for HKDF\n");
     fprintf(stderr, "\nTesting Commands:\n");
     fprintf(stderr, "  --input --test-keys      Run CSPRNG key tests\n");
     fprintf(stderr, "  --input --test-nist      Generate 10MB file for NIST tests\n");
     fprintf(stderr, "  --input --test-hash      Run hash function tests\n");
     fprintf(stderr, "  --input --test-mac       Run MAC function tests\n");
     fprintf(stderr, "  --input --test-aead      Run AEAD (GCM) function tests\n");
+    fprintf(stderr, "  --input --test-kdf       Run KDF function tests\n");
     fprintf(stderr, "\nExamples:\n");
     fprintf(stderr, "  Encryption:              %s --algorithm aes --mode cbc --encrypt --input plain.txt --output cipher.bin\n", program_name);
     fprintf(stderr, "  GCM Encryption:          %s --algorithm aes --mode gcm --encrypt --key 001122...0f --input plain.txt --output cipher.bin --aad aabbccddeeff\n", program_name);
@@ -68,10 +83,22 @@ void print_usage(const char *program_name) {
     fprintf(stderr, "  HMAC-SHA-256:            %s dgst --algorithm sha256 --hmac --key 001122...ff --input message.txt\n", program_name);
     fprintf(stderr, "  AES-CMAC:                %s dgst --algorithm aes --cmac --key 001122...ff --input message.txt --output message.cmac\n", program_name);
     fprintf(stderr, "  HMAC verification:       %s dgst --algorithm sha256 --hmac --key 001122...ff --input message.txt --verify expected.hmac\n", program_name);
+    fprintf(stderr, "  PBKDF2 key derivation:   %s derive --algorithm pbkdf2 --password \"MyPassword123\" --salt a1b2c3d4e5f601234567890123456789 --iterations 100000 --length 32\n", program_name);
+    fprintf(stderr, "  HKDF key derivation:     %s derive --algorithm hkdf --master-key 001122...ff --context \"encryption\" --length 32\n", program_name);
     fprintf(stderr, "  Key tests:               %s --input --test-keys\n", program_name);
     fprintf(stderr, "  Hash tests:              %s --input --test-hash\n", program_name);
     fprintf(stderr, "  MAC tests:               %s --input --test-mac\n", program_name);
     fprintf(stderr, "  AEAD tests:              %s --input --test-aead\n", program_name);
+    fprintf(stderr, "  KDF tests:               %s --input --test-kdf\n", program_name);
+}
+
+int is_hex_string(const char *str) {
+    for (size_t i = 0; str[i]; i++) {
+        if (!isxdigit(str[i])) {
+            return 0;
+        }
+    }
+    return 1;
 }
 
 int hex_string_to_bytes(const char *hex_string, BYTE *bytes, size_t bytes_len) {
@@ -121,21 +148,34 @@ int parse_arguments(int argc, char *argv[], config_t *config) {
     int encrypt_flag = 0;
     int decrypt_flag = 0;
     int dgst_flag = 0;
+    int derive_flag = 0;
 
     memset(config, 0, sizeof(config_t));
-    config->iv_provided = 0;
-    config->nonce_provided = 0;
-    config->aad_provided = 0;
-    config->key_provided = 0;
-    config->hmac_mode = 0;
-    config->cmac_mode = 0;
-    config->verify_mode = 0;
-    config->gcm_mode = 0;
-    config->etm_mode = 0;
+       config->iv_provided = 0;
+       config->nonce_provided = 0;
+       config->aad_provided = 0;
+       config->key_provided = 0;
+       config->hmac_mode = 0;
+       config->cmac_mode = 0;
+       config->verify_mode = 0;
+       config->gcm_mode = 0;
+       config->etm_mode = 0;
+       config->salt_provided = 0;
+       config->password_provided = 0;
+       config->derive_mode = 0;
+       config->salt_len = 0;
+
+       config->iterations = 100000;
+       config->key_length = 32;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "dgst") == 0) {
             dgst_flag = 1;
+            break;
+        }
+        if (strcmp(argv[i], "derive") == 0) {
+            derive_flag = 1;
+            config->derive_mode = 1;
             break;
         }
     }
@@ -146,7 +186,8 @@ int parse_arguments(int argc, char *argv[], config_t *config) {
                 strcmp(argv[i + 1], "--test-nist") == 0 ||
                 strcmp(argv[i + 1], "--test-hash") == 0 ||
                 strcmp(argv[i + 1], "--test-mac") == 0 ||
-                strcmp(argv[i + 1], "--test-aead") == 0) {
+                strcmp(argv[i + 1], "--test-aead") == 0 ||
+                strcmp(argv[i + 1], "--test-kdf") == 0) {
                 strncpy(config->input_file, argv[i + 1], sizeof(config->input_file) - 1);
                 config->input_file[sizeof(config->input_file) - 1] = '\0';
                 return 1;
@@ -155,17 +196,28 @@ int parse_arguments(int argc, char *argv[], config_t *config) {
     }
 
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "dgst") == 0) {
+        if (strcmp(argv[i], "dgst") == 0 || strcmp(argv[i], "derive") == 0) {
             continue;
         }
-        else if (strcmp(argv[i], "--algorithm") == 0) {
+
+        if (strcmp(argv[i], "--algorithm") == 0) {
             if (i + 1 >= argc) {
                 fprintf(stderr, "Error: --algorithm requires an argument\n");
                 return 0;
             }
             char *algo_str = argv[++i];
 
-            if (dgst_flag) {
+            if (derive_flag) {
+                if (strcmp(algo_str, "pbkdf2") == 0) {
+                    config->algorithm = ALG_PBKDF2;
+                } else if (strcmp(algo_str, "hkdf") == 0) {
+                    config->algorithm = ALG_HKDF;
+                } else {
+                    fprintf(stderr, "Error: Unsupported KDF algorithm '%s'. Supported: pbkdf2, hkdf\n", algo_str);
+                    return 0;
+                }
+                strncpy(config->kdf_algorithm, algo_str, sizeof(config->kdf_algorithm) - 1);
+            } else if (dgst_flag) {
                 if (strcmp(algo_str, "sha256") == 0) {
                     config->algorithm = ALG_SHA256;
                 } else if (strcmp(algo_str, "sha3-256") == 0) {
@@ -189,8 +241,8 @@ int parse_arguments(int argc, char *argv[], config_t *config) {
                 fprintf(stderr, "Error: --mode requires an argument\n");
                 return 0;
             }
-            if (dgst_flag) {
-                fprintf(stderr, "Error: --mode not allowed for hash/MAC operations\n");
+            if (dgst_flag || derive_flag) {
+                fprintf(stderr, "Error: --mode not allowed for hash/MAC/KDF operations\n");
                 return 0;
             }
             char *mode_str = argv[++i];
@@ -213,16 +265,16 @@ int parse_arguments(int argc, char *argv[], config_t *config) {
             }
         }
         else if (strcmp(argv[i], "--encrypt") == 0) {
-            if (dgst_flag) {
-                fprintf(stderr, "Error: --encrypt not allowed for hash/MAC operations\n");
+            if (dgst_flag || derive_flag) {
+                fprintf(stderr, "Error: --encrypt not allowed for hash/MAC/KDF operations\n");
                 return 0;
             }
             encrypt_flag = 1;
             config->operation = MODE_ENCRYPT;
         }
         else if (strcmp(argv[i], "--decrypt") == 0) {
-            if (dgst_flag) {
-                fprintf(stderr, "Error: --decrypt not allowed for hash/MAC operations\n");
+            if (dgst_flag || derive_flag) {
+                fprintf(stderr, "Error: --decrypt not allowed for hash/MAC/KDF operations\n");
                 return 0;
             }
             decrypt_flag = 1;
@@ -241,6 +293,147 @@ int parse_arguments(int argc, char *argv[], config_t *config) {
                 return 0;
             }
             config->cmac_mode = 1;
+        }
+        else if (strcmp(argv[i], "--password") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: --password requires an argument\n");
+                return 0;
+            }
+            if (!derive_flag) {
+                fprintf(stderr, "Error: --password only allowed for derive command\n");
+                return 0;
+            }
+            strncpy(config->password, argv[++i], sizeof(config->password) - 1);
+            config->password[sizeof(config->password) - 1] = '\0';
+            config->password_provided = 1;
+        }
+        else if (strcmp(argv[i], "--salt") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: --salt requires an argument\n");
+                return 0;
+            }
+            if (!derive_flag) {
+                fprintf(stderr, "Error: --salt only allowed for derive command\n");
+                return 0;
+            }
+
+            char *salt_str = argv[++i];
+            size_t salt_str_len = strlen(salt_str);
+
+            if (salt_str_len == 0) {
+                fprintf(stderr, "Error: Salt cannot be empty\n");
+                return 0;
+            }
+
+            config->salt_provided = 1;
+
+            if (is_hex_string(salt_str)) {
+                if (salt_str_len % 2 != 0) {
+                    fprintf(stderr, "Error: Hex salt must have even length\n");
+                    return 0;
+                }
+
+                config->salt_len = salt_str_len / 2;
+                if (config->salt_len > sizeof(config->salt_data)) {
+                    fprintf(stderr, "Error: Salt too long (max %zu bytes)\n", sizeof(config->salt_data));
+                    return 0;
+                }
+
+                if (!hex_string_to_bytes(salt_str, config->salt_data, config->salt_len)) {
+                    fprintf(stderr, "Error: Invalid hex salt format\n");
+                    return 0;
+                }
+
+                strncpy(config->salt_hex, salt_str, sizeof(config->salt_hex) - 1);
+                config->salt_hex[sizeof(config->salt_hex) - 1] = '\0';
+
+            } else {
+                config->salt_len = salt_str_len;
+                if (config->salt_len > sizeof(config->salt_data)) {
+                    fprintf(stderr, "Error: Salt too long (max %zu bytes)\n", sizeof(config->salt_data));
+                    return 0;
+                }
+
+                memcpy(config->salt_data, salt_str, config->salt_len);
+
+                for (size_t j = 0; j < config->salt_len; j++) {
+                    sprintf(config->salt_hex + (j * 2), "%02x", config->salt_data[j]);
+                }
+                config->salt_hex[config->salt_len * 2] = '\0';
+            }
+
+            printf("DEBUG: Salt interpreted as %s string, length: %zu bytes\n",
+                   is_hex_string(salt_str) ? "hex" : "text", config->salt_len);
+        }
+        else if (strcmp(argv[i], "--iterations") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: --iterations requires an argument\n");
+                return 0;
+            }
+            if (!derive_flag) {
+                fprintf(stderr, "Error: --iterations only allowed for derive command\n");
+                return 0;
+            }
+            config->iterations = atoi(argv[++i]);
+            if (config->iterations == 0) {
+                fprintf(stderr, "Error: Iterations must be positive integer\n");
+                return 0;
+            }
+        }
+        else if (strcmp(argv[i], "--length") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: --length requires an argument\n");
+                return 0;
+            }
+            if (!derive_flag) {
+                fprintf(stderr, "Error: --length only allowed for derive command\n");
+                return 0;
+            }
+            config->key_length = atoi(argv[++i]);
+            if (config->key_length == 0 || config->key_length > MAX_KDF_KEY_LENGTH) {
+                fprintf(stderr, "Error: Key length must be between 1 and %d bytes\n", MAX_KDF_KEY_LENGTH);
+                return 0;
+            }
+        }
+        else if (strcmp(argv[i], "--master-key") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: --master-key requires an argument\n");
+                return 0;
+            }
+            if (!derive_flag) {
+                fprintf(stderr, "Error: --master-key only allowed for derive command\n");
+                return 0;
+            }
+            char *key_hex = argv[++i];
+            size_t hex_len = strlen(key_hex);
+            if (hex_len % 2 != 0) {
+                fprintf(stderr, "Error: Master key must be hexadecimal string with even length\n");
+                return 0;
+            }
+            size_t byte_len = hex_len / 2;
+            if (byte_len > sizeof(config->key)) {
+                fprintf(stderr, "Error: Master key too long\n");
+                return 0;
+            }
+            if (!hex_string_to_bytes(key_hex, config->key, byte_len)) {
+                fprintf(stderr, "Error: Invalid master key format\n");
+                return 0;
+            }
+            config->key_provided = 1;
+        }
+        else if (strcmp(argv[i], "--context") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: --context requires an argument\n");
+                return 0;
+            }
+            if (!derive_flag) {
+                fprintf(stderr, "Error: --context only allowed for derive command with hkdf algorithm\n");
+                return 0;
+            }
+
+            strncpy(config->password, argv[++i], sizeof(config->password) - 1);
+            config->password[sizeof(config->password) - 1] = '\0';
+            config->password_provided = 1;
         }
         else if (strcmp(argv[i], "--key") == 0) {
             if (i + 1 >= argc) {
@@ -275,6 +468,12 @@ int parse_arguments(int argc, char *argv[], config_t *config) {
                     return 0;
                 }
                 config->key_provided = 1;
+            } else if (derive_flag) {
+                if (!hex_string_to_bytes(argv[++i], config->key, AES_128_KEY_SIZE)) {
+                    fprintf(stderr, "Error: Invalid key format. Must be 32-character hexadecimal string\n");
+                    return 0;
+                }
+                config->key_provided = 1;
             } else {
                 if (!hex_string_to_bytes(argv[++i], config->key, AES_128_KEY_SIZE)) {
                     fprintf(stderr, "Error: Invalid key format. Must be 32-character hexadecimal string\n");
@@ -288,8 +487,8 @@ int parse_arguments(int argc, char *argv[], config_t *config) {
                 fprintf(stderr, "Error: --iv requires an argument\n");
                 return 0;
             }
-            if (dgst_flag) {
-                fprintf(stderr, "Error: --iv not allowed for hash/MAC operations\n");
+            if (dgst_flag || derive_flag) {
+                fprintf(stderr, "Error: --iv not allowed for hash/MAC/KDF operations\n");
                 return 0;
             }
 
@@ -313,7 +512,7 @@ int parse_arguments(int argc, char *argv[], config_t *config) {
                 fprintf(stderr, "Error: --aad requires an argument\n");
                 return 0;
             }
-            if (dgst_flag) {
+            if (dgst_flag || derive_flag) {
                 fprintf(stderr, "Error: --aad only allowed for encryption operations\n");
                 return 0;
             }
@@ -378,6 +577,25 @@ int parse_arguments(int argc, char *argv[], config_t *config) {
             fprintf(stderr, "Error: Unknown argument '%s'\n", argv[i]);
             return 0;
         }
+    }
+
+    if (derive_flag) {
+        if (config->algorithm == ALG_PBKDF2) {
+            if (!config->password_provided) {
+                fprintf(stderr, "Error: --password is required for PBKDF2\n");
+                return 0;
+            }
+        } else if (config->algorithm == ALG_HKDF) {
+            if (!config->key_provided) {
+                fprintf(stderr, "Error: --master-key or --key is required for HKDF\n");
+                return 0;
+            }
+            if (!config->password_provided) {
+                fprintf(stderr, "Error: --context is required for HKDF\n");
+                return 0;
+            }
+        }
+        return 1;
     }
 
     if (dgst_flag) {
