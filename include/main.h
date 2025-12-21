@@ -121,6 +121,10 @@ int ofb_encrypt(const BYTE *key, const BYTE *iv, const BYTE *input, size_t input
 int ofb_decrypt(const BYTE *key, const BYTE *iv, const BYTE *input, size_t input_len, BYTE **output, size_t *output_len);
 int ctr_encrypt(const BYTE *key, const BYTE *iv, const BYTE *input, size_t input_len, BYTE **output, size_t *output_len);
 int ctr_decrypt(const BYTE *key, const BYTE *iv, const BYTE *input, size_t input_len, BYTE **output, size_t *output_len);
+int cbc_encrypt_no_padding(const BYTE *key, const BYTE *iv, const BYTE *input, size_t input_len, BYTE **output, size_t *output_len);
+int cbc_decrypt_no_padding(const BYTE *key, const BYTE *iv, const BYTE *input, size_t input_len, BYTE **output, size_t *output_len);
+int ofb_encrypt_no_padding(const BYTE *key, const BYTE *iv, const BYTE *input, size_t input_len, BYTE **output, size_t *output_len);
+int ofb_decrypt_no_padding(const BYTE *key, const BYTE *iv, const BYTE *input, size_t input_len, BYTE **output, size_t *output_len);
 
 int gcm_encrypt_full(const BYTE *key,
                      const BYTE *plaintext, size_t plaintext_len,
@@ -153,5 +157,10 @@ int run_hash_tests(void);
 int run_all_mac_tests(void);
 int run_aead_tests(void);
 int run_all_kdf_tests(void);
+
+int main_unit_tests(void);
+int run_all_vectors_tests(void);
+int run_all_integration_tests(void);
+int main_integration_tests(void);
 
 #endif /* MAIN_H */

@@ -55,7 +55,7 @@ void print_usage(const char *program_name) {
     fprintf(stderr, "  --input INPUT_FILE       Input file path\n");
     fprintf(stderr, "  --output OUTPUT_FILE     Output file path (optional)\n");
     fprintf(stderr, "  --verify VERIFY_FILE     Verify against CMAC in file\n");
-    fprintf(stderr, "\nKey Derivation Arguments:\n");  // <-- НОВОЕ
+    fprintf(stderr, "\nKey Derivation Arguments:\n");
     fprintf(stderr, "  derive                   Derive key from password\n");
     fprintf(stderr, "  --algorithm ALGORITHM    KDF algorithm (pbkdf2, hkdf)\n");
     fprintf(stderr, "  --password PASSWORD      Password string (use quotes if contains spaces)\n");
@@ -73,6 +73,9 @@ void print_usage(const char *program_name) {
     fprintf(stderr, "  --input --test-mac       Run MAC function tests\n");
     fprintf(stderr, "  --input --test-aead      Run AEAD (GCM) function tests\n");
     fprintf(stderr, "  --input --test-kdf       Run KDF function tests\n");
+    fprintf(stderr, "  --input --test-unit      Run unit tests for all modules\n");
+    fprintf(stderr, "  --input --test-vectors    Run all known-answer vector tests\n");
+    fprintf(stderr, "  --input --test-integration Run integration tests (CLI end-to-end)\n");
     fprintf(stderr, "\nExamples:\n");
     fprintf(stderr, "  Encryption:              %s --algorithm aes --mode cbc --encrypt --input plain.txt --output cipher.bin\n", program_name);
     fprintf(stderr, "  GCM Encryption:          %s --algorithm aes --mode gcm --encrypt --key 001122...0f --input plain.txt --output cipher.bin --aad aabbccddeeff\n", program_name);
@@ -169,6 +172,13 @@ int parse_arguments(int argc, char *argv[], config_t *config) {
        config->key_length = 32;
 
     for (int i = 1; i < argc; i++) {
+    	if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
+    		print_usage(argv[0]);
+    		return 0;
+        }
+    }
+
+    for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "dgst") == 0) {
             dgst_flag = 1;
             break;
@@ -187,7 +197,11 @@ int parse_arguments(int argc, char *argv[], config_t *config) {
                 strcmp(argv[i + 1], "--test-hash") == 0 ||
                 strcmp(argv[i + 1], "--test-mac") == 0 ||
                 strcmp(argv[i + 1], "--test-aead") == 0 ||
-                strcmp(argv[i + 1], "--test-kdf") == 0) {
+                strcmp(argv[i + 1], "--test-kdf") == 0 ||
+                strcmp(argv[i + 1], "--test-unit") == 0 ||
+                strcmp(argv[i + 1], "--test-integration") == 0 ||
+				strcmp(argv[i + 1], "--test-vectors") == 0) {
+
                 strncpy(config->input_file, argv[i + 1], sizeof(config->input_file) - 1);
                 config->input_file[sizeof(config->input_file) - 1] = '\0';
                 return 1;

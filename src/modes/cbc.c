@@ -159,3 +159,100 @@ cleanup:
     return result;
 }
 
+int cbc_encrypt_no_padding(const BYTE *key, const BYTE *iv, const BYTE *input, size_t input_len, BYTE **output, size_t *output_len) {
+    if (input_len % BLOCK_SIZE != 0) {
+        fprintf(stderr, "Error: Input length must be multiple of 16 for no-padding CBC mode\n");
+        return 0;
+    }
+
+    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+    if (!ctx) {
+        fprintf(stderr, "Error: Failed to create cipher context\n");
+        return 0;
+    }
+
+    if (EVP_EncryptInit_ex(ctx, EVP_aes_128_cbc(), NULL, key, iv) != 1) {
+        fprintf(stderr, "Error: Failed to initialize encryption\n");
+        EVP_CIPHER_CTX_free(ctx);
+        return 0;
+    }
+
+    EVP_CIPHER_CTX_set_padding(ctx, 0);
+
+    *output = malloc(input_len);
+    if (!*output) {
+        fprintf(stderr, "Error: Memory allocation failed\n");
+        EVP_CIPHER_CTX_free(ctx);
+        return 0;
+    }
+
+    int out_len;
+    if (EVP_EncryptUpdate(ctx, *output, &out_len, input, (int)input_len) != 1) {
+        fprintf(stderr, "Error: Encryption failed\n");
+        free(*output);
+        EVP_CIPHER_CTX_free(ctx);
+        return 0;
+    }
+
+    int final_len;
+    if (EVP_EncryptFinal_ex(ctx, *output + out_len, &final_len) != 1) {
+        fprintf(stderr, "Error: Encryption finalization failed\n");
+        free(*output);
+        EVP_CIPHER_CTX_free(ctx);
+        return 0;
+    }
+
+    *output_len = (size_t)(out_len + final_len);
+
+    EVP_CIPHER_CTX_free(ctx);
+    return 1;
+}
+
+int cbc_decrypt_no_padding(const BYTE *key, const BYTE *iv, const BYTE *input, size_t input_len, BYTE **output, size_t *output_len) {
+    if (input_len % BLOCK_SIZE != 0) {
+        fprintf(stderr, "Error: Input length must be multiple of 16 for no-padding CBC mode\n");
+        return 0;
+    }
+
+    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+    if (!ctx) {
+        fprintf(stderr, "Error: Failed to create cipher context\n");
+        return 0;
+    }
+
+    if (EVP_DecryptInit_ex(ctx, EVP_aes_128_cbc(), NULL, key, iv) != 1) {
+        fprintf(stderr, "Error: Failed to initialize decryption\n");
+        EVP_CIPHER_CTX_free(ctx);
+        return 0;
+    }
+
+    EVP_CIPHER_CTX_set_padding(ctx, 0);
+
+    *output = malloc(input_len);
+    if (!*output) {
+        fprintf(stderr, "Error: Memory allocation failed\n");
+        EVP_CIPHER_CTX_free(ctx);
+        return 0;
+    }
+
+    int out_len;
+    if (EVP_DecryptUpdate(ctx, *output, &out_len, input, (int)input_len) != 1) {
+        fprintf(stderr, "Error: Decryption failed\n");
+        free(*output);
+        EVP_CIPHER_CTX_free(ctx);
+        return 0;
+    }
+
+    int final_len;
+    if (EVP_DecryptFinal_ex(ctx, *output + out_len, &final_len) != 1) {
+        fprintf(stderr, "Error: Decryption finalization failed\n");
+        free(*output);
+        EVP_CIPHER_CTX_free(ctx);
+        return 0;
+    }
+
+    *output_len = (size_t)(out_len + final_len);
+
+    EVP_CIPHER_CTX_free(ctx);
+    return 1;
+}

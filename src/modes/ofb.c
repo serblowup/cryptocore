@@ -65,3 +65,50 @@ int ofb_decrypt(const BYTE *key, const BYTE *iv, const BYTE *input, size_t input
     return ofb_encrypt(key, iv, input, input_len, output, output_len);
 }
 
+int ofb_encrypt_no_padding(const BYTE *key, const BYTE *iv, const BYTE *input, size_t input_len, BYTE **output, size_t *output_len) {
+    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+    if (!ctx) {
+        fprintf(stderr, "Error: Failed to create cipher context\n");
+        return 0;
+    }
+
+    if (EVP_EncryptInit_ex(ctx, EVP_aes_128_ofb(), NULL, key, iv) != 1) {
+        fprintf(stderr, "Error: Failed to initialize encryption\n");
+        EVP_CIPHER_CTX_free(ctx);
+        return 0;
+    }
+
+    EVP_CIPHER_CTX_set_padding(ctx, 0);
+
+    *output = malloc(input_len);
+    if (!*output) {
+        fprintf(stderr, "Error: Memory allocation failed\n");
+        EVP_CIPHER_CTX_free(ctx);
+        return 0;
+    }
+
+    int out_len;
+    if (EVP_EncryptUpdate(ctx, *output, &out_len, input, (int)input_len) != 1) {
+        fprintf(stderr, "Error: Encryption failed\n");
+        free(*output);
+        EVP_CIPHER_CTX_free(ctx);
+        return 0;
+    }
+
+    int final_len;
+    if (EVP_EncryptFinal_ex(ctx, *output + out_len, &final_len) != 1) {
+        fprintf(stderr, "Error: Encryption finalization failed\n");
+        free(*output);
+        EVP_CIPHER_CTX_free(ctx);
+        return 0;
+    }
+
+    *output_len = (size_t)(out_len + final_len);
+
+    EVP_CIPHER_CTX_free(ctx);
+    return 1;
+}
+
+int ofb_decrypt_no_padding(const BYTE *key, const BYTE *iv, const BYTE *input, size_t input_len, BYTE **output, size_t *output_len) {
+    return ofb_encrypt_no_padding(key, iv, input, input_len, output, output_len);
+}

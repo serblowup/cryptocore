@@ -553,6 +553,18 @@ int main(int argc, char *argv[]) {
         goto cleanup;
     }
 
+    if (strcmp(config.input_file, "--test-unit") == 0) {
+            return main_unit_tests() ? 0 : 1;
+    }
+
+    if (strcmp(config.input_file, "--test-integration") == 0) {
+        return run_all_integration_tests() ? 0 : 1;
+    }
+
+    if (strcmp(config.input_file, "--test-vectors") == 0) {
+        return run_all_vectors_tests() ? 0 : 1;
+    }
+
     if (dgst_mode) {
             if (config.hmac_mode) {
                 success = compute_hmac(&config, config.input_file,

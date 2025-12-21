@@ -171,7 +171,7 @@ static int test_gcm_empty(void) {
         return 0;
     }
 
-    if (encrypted_len != 28) { // 12 nonce + 0 ciphertext + 16 tag
+    if (encrypted_len != 28) {
         printf("Fail: Wrong size for empty data (expected 28, got %zu)\n", encrypted_len);
         free(encrypted);
         return 0;
@@ -268,7 +268,6 @@ static int test_gcm_tampered_ciphertext(void) {
         return 0;
     }
 
-    // Подменяем один байт в ciphertext (не в nonce и не в tag!)
     encrypted[12 + 5] ^= 0x01;
 
     BYTE *decrypted = NULL;
@@ -313,7 +312,6 @@ static int test_gcm_tampered_tag(void) {
         return 0;
     }
 
-    // Подменяем последний байт тега
     encrypted[encrypted_len - 1] ^= 0x01;
 
     BYTE *decrypted = NULL;
@@ -405,7 +403,6 @@ static int test_gcm_nonce_uniqueness(void) {
         return 0;
     }
 
-    // Проверяем что nonces разные (первые 12 байт)
     if (memcmp(encrypted1, encrypted2, 12) == 0) {
         printf("Fail: Nonces are identical (highly unlikely with CSPRNG)\n");
         free(encrypted1);
